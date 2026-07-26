@@ -213,7 +213,7 @@ systemd behavior.
   Mitigation: do not change `Config::new(...)`; initialize the field there; provide a builder method;
   update in-repo struct literals if any exist.
 - **Go source compatibility risk:** adding a field to `LogConfig` is compatible for keyed literals but
-  can break unkeyed composite literals. In-repo uses appear keyed; implementer must grep and record.
+  can break unkeyed composite literals. In-repo uses appear keyed; implementation must grep and record.
 - **Semantic risk:** eager-open cannot use first event time because the first event is not available
   yet. Mitigation: document lazy open as the required mode for event-time chain filenames.
 - **False-positive scope risk:** Go direct writer has a wall-clock default for omitted realtime, but
@@ -285,8 +285,8 @@ added.
 - Search `tests/` and `fixtures/` for explicit fresh-journal realtime writes and read-back assertions;
   update or rerun affected tests and record evidence.
 - Same-failure search over construction sites and timestamp clamp paths.
-- External read-only reviewer pool verifies the gap and implementation plan before implementation
-  begins.
+- Preserve the completed external read-only verification of the gap and implementation plan recorded
+  below.
 
 ### Artifact impact plan
 
@@ -320,26 +320,34 @@ added.
   wrap.
 - Alternative considered: an explicit "adopt-first observed timestamp" mode on `RealtimeClock`
   (start `max_seen` unset; first `observe` adopts). More invasive (changes `RealtimeClock`'s state
-  model) for no functional gain over seeding to `0`. Rejected unless the implementer finds a concrete
+  model) for no functional gain over seeding to `0`. Rejected unless implementation finds a concrete
   reason the `0` floor is unsafe.
 
 ## Plan
 
-1. Get read-only reviewer verification from `glm`, `minimax`, `kimi`, `mimo`, `deepseek`, and `qwen`
-   for this diagnosis and plan.
+1. Preserve the completed read-only reviewer verification of this diagnosis and plan.
 2. Apply reviewer corrections to this SOW before implementation if they find a real gap.
 3. Implement Rust high-level seed API/startup behavior and tests.
 4. Implement Go high-level parity seed API/startup behavior and tests.
 5. Update specs and docs.
-6. Run validation, same-failure searches, and external read-only production-grade review after the
-   implementation chunk is complete.
+6. Run validation and same-failure searches. Recommend whole-SOW external review after local
+   validation; when authorized, follow the system-wide `external-reviewers` skill.
 7. Close the SOW only after validation, reviewer disposition, artifact gates, and status/directory
    consistency are recorded.
 
-## Delegation Plan
+## Implementation And Review Plan
 
-To be executed by the implementing agent the user pairs with. This SOW is self-contained on the SDK side;
-the consumer wiring lives in the Netdata repo SOW.
+Implementation:
+
+- The project manager implements this SOW after activation and completion of its pre-implementation
+  gate. This SOW is self-contained on the SDK side; consumer wiring lives in the Netdata repository
+  SOW.
+
+Reviewers:
+
+- Historical plan-review evidence is recorded below. Review of the future implementation change set
+  requires authorization in the conversation where this SOW is activated; when authorized, follow
+  the system-wide `external-reviewers` skill.
 
 ## Execution Log
 

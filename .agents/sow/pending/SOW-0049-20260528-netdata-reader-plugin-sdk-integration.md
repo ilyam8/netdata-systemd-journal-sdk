@@ -151,17 +151,20 @@ Open decisions:
 3. Validate static/no-libsystemd behavior.
 4. Review and close.
 
-## Delegation Plan
+## Implementation And Review Plan
 
-Implementer:
+Implementation:
 
-- Local implementation by the project manager unless the user changes routing.
+- The project manager implements this SOW after activation and completion of its
+  pre-implementation gate.
 
 Reviewers:
 
-- Read-only reviewers from the approved pool.
+- External review is pending user authorization. Recommend whole-SOW review
+  after local validation and before GitHub submission; when authorized, follow
+  the system-wide `external-reviewers` skill.
 
-Repository boundary block for every external-agent prompt:
+Repository boundary block for every external-reviewer prompt:
 
 ```text
 CRITICAL REPOSITORY BOUNDARY:

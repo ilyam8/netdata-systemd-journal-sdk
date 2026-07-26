@@ -513,6 +513,219 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIn("### Configuration Differences", markdown)
         self.assertIn("| rust | raw-payload | windowed | structured-field | windowed |", markdown)
 
+    def test_writer_configuration_renders_workload_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            report = {
+                "benchmark": "writer-core",
+                "parameters": {
+                    "languages": ["rust"],
+                    "workload": "netflow-v5-repeating-256",
+                    "fields_per_row": 29,
+                    "application_fields_per_row": 29,
+                    "entry_items_per_row": 30,
+                    "application_logical_bytes_per_row": 450,
+                    "total_logical_data_bytes_per_row": 491,
+                },
+                "summary": {
+                    "rust": {
+                        "api_modes": ["structured-field"],
+                        "mmap_strategies": ["windowed"],
+                        "append_rows_per_second_median": 10,
+                        "append_rows_per_second_min": 9,
+                        "append_rows_per_second_max": 11,
+                    }
+                },
+            }
+            (run_dir / "report.json").write_text(json.dumps(report), encoding="utf-8")
+            run = reports.load_run(run_dir, "run")
+            markdown = reports.render_report(
+                title="Writer Workload",
+                run=run,
+                before=None,
+                after=None,
+                conclusion="not-assessed",
+                conclusion_note="",
+            )
+
+        self.assertIn("| workload | netflow-v5-repeating-256 |", markdown)
+        self.assertIn("| entry_items_per_row | 30 |", markdown)
+        self.assertIn("| total_logical_data_bytes_per_row | 491 |", markdown)
+
+    def test_writer_change_rejects_different_workloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before_dir = root / "before"
+            after_dir = root / "after"
+            before_dir.mkdir()
+            after_dir.mkdir()
+            summary = {
+                "rust": {
+                    "api_modes": ["structured-field"],
+                    "mmap_strategies": ["windowed"],
+                    "append_rows_per_second_median": 10,
+                    "append_rows_per_second_min": 9,
+                    "append_rows_per_second_max": 11,
+                }
+            }
+            for run_dir, workload in (
+                (before_dir, "mixed-cardinality-32-fields"),
+                (after_dir, "netflow-v5-repeating-256"),
+            ):
+                (run_dir / "report.json").write_text(
+                    json.dumps(
+                        {
+                            "benchmark": "writer-core",
+                            "parameters": {
+                                "languages": ["rust"],
+                                "workload": workload,
+                            },
+                            "summary": summary,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            before = reports.load_run(before_dir, "before")
+            after = reports.load_run(after_dir, "after")
+            with self.assertRaises(SystemExit) as raised:
+                reports.render_report(
+                    title="Mismatched Writer Workloads",
+                    run=None,
+                    before=before,
+                    after=after,
+                    conclusion="not-assessed",
+                    conclusion_note="",
+                )
+
+        self.assertIn(
+            "writer before/after workload configuration differs for workload",
+            str(raised.exception),
+        )
+
+    def test_writer_change_rejects_incomplete_explicit_workload_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before_dir = root / "before"
+            after_dir = root / "after"
+            before_dir.mkdir()
+            after_dir.mkdir()
+            parameters = {
+                "languages": ["rust"],
+                "workload": "netflow-v5-repeating-256",
+                "application_fields_per_row": 29,
+                "entry_items_per_row": 30,
+                "application_logical_bytes_per_row": 450,
+                "total_logical_data_bytes_per_row": 491,
+            }
+            summary = {
+                "rust": {
+                    "api_modes": ["structured-field"],
+                    "mmap_strategies": ["windowed"],
+                    "append_rows_per_second_median": 10,
+                    "append_rows_per_second_min": 9,
+                    "append_rows_per_second_max": 11,
+                }
+            }
+            for run_dir in (before_dir, after_dir):
+                report = {
+                    "benchmark": "writer-core",
+                    "parameters": dict(parameters),
+                    "summary": summary,
+                }
+                (run_dir / "report.json").write_text(
+                    json.dumps(report),
+                    encoding="utf-8",
+                )
+            after_report = json.loads(
+                (after_dir / "report.json").read_text(encoding="utf-8")
+            )
+            del after_report["parameters"]["total_logical_data_bytes_per_row"]
+            (after_dir / "report.json").write_text(
+                json.dumps(after_report),
+                encoding="utf-8",
+            )
+
+            before = reports.load_run(before_dir, "before")
+            after = reports.load_run(after_dir, "after")
+            with self.assertRaises(SystemExit) as raised:
+                reports.render_report(
+                    title="Incomplete Writer Workload Metadata",
+                    run=None,
+                    before=before,
+                    after=after,
+                    conclusion="not-assessed",
+                    conclusion_note="",
+                )
+
+        self.assertIn(
+            "incomplete explicit writer workload metadata",
+            str(raised.exception),
+        )
+        self.assertIn(
+            "total_logical_data_bytes_per_row",
+            str(raised.exception),
+        )
+
+    def test_writer_change_accepts_legacy_default_against_complete_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before_dir = root / "before"
+            after_dir = root / "after"
+            before_dir.mkdir()
+            after_dir.mkdir()
+            summary = {
+                "rust": {
+                    "api_modes": ["structured-field"],
+                    "mmap_strategies": ["windowed"],
+                    "append_rows_per_second_median": 10,
+                    "append_rows_per_second_min": 9,
+                    "append_rows_per_second_max": 11,
+                }
+            }
+            before_report = {
+                "benchmark": "writer-core",
+                "parameters": {
+                    "languages": ["rust"],
+                    "fields_per_row": 32,
+                },
+                "summary": summary,
+            }
+            after_report = {
+                "benchmark": "writer-core",
+                "parameters": {
+                    "languages": ["rust"],
+                    "workload": reports.DEFAULT_WRITER_WORKLOAD,
+                    "fields_per_row": 32,
+                    "application_fields_per_row": 32,
+                    "entry_items_per_row": 32,
+                    "application_logical_bytes_per_row": 817,
+                    "total_logical_data_bytes_per_row": 817,
+                },
+                "summary": summary,
+            }
+            (before_dir / "report.json").write_text(
+                json.dumps(before_report),
+                encoding="utf-8",
+            )
+            (after_dir / "report.json").write_text(
+                json.dumps(after_report),
+                encoding="utf-8",
+            )
+
+            before = reports.load_run(before_dir, "before")
+            after = reports.load_run(after_dir, "after")
+            markdown = reports.render_report(
+                title="Legacy Default Writer Comparison",
+                run=None,
+                before=before,
+                after=after,
+                conclusion="not-assessed",
+                conclusion_note="",
+            )
+
+        self.assertIn("## Change Comparison", markdown)
+
 
 if __name__ == "__main__":
     unittest.main()

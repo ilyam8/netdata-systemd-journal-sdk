@@ -116,17 +116,18 @@ Open decisions:
 1. [chunk, scope, risk, dependencies]
 2. [chunk, scope, risk, dependencies]
 
-## Delegation Plan
+## Implementation And Review Plan
 
-Implementer:
+Implementation:
 
-- [Preferred implementer model or reason this SOW is not delegated.]
+- [Implementation ownership, work chunks, and required evidence.]
 
 Reviewers:
 
-- [Reviewer models or review mechanism.]
+- [External-review authorization or waiver status. When authorized, use the
+  system-wide `external-reviewers` skill; do not copy model or harness details.]
 
-Repository boundary block for every external-agent prompt:
+Repository boundary block for every external-reviewer prompt:
 
 ```text
 CRITICAL REPOSITORY BOUNDARY:
@@ -140,7 +141,8 @@ CRITICAL REPOSITORY BOUNDARY:
 
 Failure handling:
 
-- [How implementer failure, reviewer failure, audit failure, or model unavailability will be recorded and handled.]
+- [How implementation, validation, reviewer, or audit failure will be recorded
+  and handled.]
 
 ## Execution Log
 

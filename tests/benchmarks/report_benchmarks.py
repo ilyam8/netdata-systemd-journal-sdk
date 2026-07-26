@@ -13,6 +13,13 @@ from typing import Any
 
 LANGUAGE_ORDER = ["systemd", "rust", "go"]
 SURFACE_ORDER = ["file", "open-files", "directory", "writer-core"]
+DEFAULT_WRITER_WORKLOAD = "mixed-cardinality-32-fields"
+WRITER_WORKLOAD_SHAPE_KEYS = [
+    "application_fields_per_row",
+    "entry_items_per_row",
+    "application_logical_bytes_per_row",
+    "total_logical_data_bytes_per_row",
+]
 
 READER_PRODUCTION_ORDER = [
     ("systemd", "data", "", ""),
@@ -682,6 +689,66 @@ def writer_config_difference_rows(
     return rows
 
 
+def writer_workload_value(run: BenchmarkRun, field: str) -> Any:
+    parameters = run.manifest.get("parameters")
+    if not isinstance(parameters, dict):
+        parameters = {}
+    if field == "workload":
+        return parameters.get(field, DEFAULT_WRITER_WORKLOAD)
+    if field == "application_fields_per_row":
+        return parameters.get(field, parameters.get("fields_per_row"))
+    if field == "entry_items_per_row":
+        return parameters.get(
+            field,
+            parameters.get("application_fields_per_row", parameters.get("fields_per_row")),
+        )
+    return parameters.get(field)
+
+
+def validate_writer_change_compatibility(
+    before: BenchmarkRun,
+    after: BenchmarkRun,
+) -> None:
+    before_workload = writer_workload_value(before, "workload")
+    after_workload = writer_workload_value(after, "workload")
+    if before_workload != after_workload:
+        raise SystemExit(
+            "writer before/after workload configuration differs for "
+            f"workload: {before_workload!r} vs {after_workload!r}"
+        )
+
+    validate_explicit_writer_workload_metadata(before)
+    validate_explicit_writer_workload_metadata(after)
+    for field in WRITER_WORKLOAD_SHAPE_KEYS:
+        before_value = writer_workload_value(before, field)
+        after_value = writer_workload_value(after, field)
+        if (
+            before_value is not None
+            and after_value is not None
+            and before_value != after_value
+        ):
+            raise SystemExit(
+                "writer before/after workload configuration differs for "
+                f"{field}: {before_value!r} vs {after_value!r}"
+            )
+
+
+def validate_explicit_writer_workload_metadata(run: BenchmarkRun) -> None:
+    parameters = run.manifest.get("parameters")
+    if not isinstance(parameters, dict) or "workload" not in parameters:
+        return
+    missing = [
+        field
+        for field in WRITER_WORKLOAD_SHAPE_KEYS
+        if field not in parameters or parameters[field] is None
+    ]
+    if missing:
+        raise SystemExit(
+            f"incomplete explicit writer workload metadata in {run.summary_path}: "
+            + ", ".join(missing)
+        )
+
+
 def render_identity(run: BenchmarkRun | None, before: BenchmarkRun | None, after: BenchmarkRun | None) -> list[str]:
     rows = []
     for role, item in (("run", run), ("before", before), ("after", after)):
@@ -728,7 +795,12 @@ def config_pairs(run: BenchmarkRun) -> list[list[str]]:
             "fss",
             "final_state",
             "rows",
+            "workload",
             "fields_per_row",
+            "application_fields_per_row",
+            "entry_items_per_row",
+            "application_logical_bytes_per_row",
+            "total_logical_data_bytes_per_row",
             "repetitions",
             "warmups",
             "languages",
@@ -822,6 +894,8 @@ def validate_report_inputs(
         raise SystemExit("--after requires --before")
     if before is not None and before.kind != after.kind:
         raise SystemExit(f"before/after benchmark kinds differ: {before.kind} vs {after.kind}")
+    if before is not None and before.kind == "writer-core":
+        validate_writer_change_compatibility(before, after)
     return primary
 
 

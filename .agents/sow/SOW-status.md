@@ -1,6 +1,6 @@
 # SOW Status
 
-Last updated: 2026-07-07
+Last updated: 2026-07-26
 
 ## Current
 
@@ -8,6 +8,11 @@ Last updated: 2026-07-07
 
 ## Pending
 
+- SOW-0135 - Rust Writer Entry-Link State Reuse: open. Carries DATA link
+  metadata already resolved for the current entry into publication and opens a
+  non-full compact tail once, preserving byte/index/API compatibility and final
+  DATA-header publication ordering. Ready for activation after completed
+  SOW-0134.
 - SOW-0048 - Netdata OTEL Writer SDK Integration: open. Component integration
   for OTEL writer paths after inventory and writer gates.
 - SOW-0049 - Netdata Reader Plugin SDK Integration: open. Component integration
@@ -41,6 +46,12 @@ Last updated: 2026-07-07
   decisions. Not executable until the user explicitly resumes it.
 ## Recently Closed Or Completed
 
+- SOW-0134 - Rust Writer Repeating-DATA Diagnostics: completed. Added an exact
+  Rust-only 29-application-field/30-ENTRY-item repeating-256 writer workload,
+  preserved the historical default and compact/regular raw/structured bytes,
+  and reproduced the DATA lookup, hashing, object-validation, mmap, and link
+  publication cluster. Whole-file mmap did not materially separate throughput;
+  SOW-0135 carries the selected entry-local state-reuse design.
 - SOW-0133 - v0.7.8 Host-Prefix Boot-ID Release: completed. Linux optional
   journalhost helpers now apply explicit host filesystem prefixes to boot-id as
   well as machine-id. Rust crates were published to crates.io at `0.7.8`,

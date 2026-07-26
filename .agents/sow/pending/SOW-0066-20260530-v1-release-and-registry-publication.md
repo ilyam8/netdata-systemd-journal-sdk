@@ -237,18 +237,20 @@ Open decisions:
 5. Confirm publish decision and credentials.
 6. Tag, publish, verify, and document.
 
-## Delegation Plan
+## Implementation And Review Plan
 
-Implementer:
+Implementation:
 
-- Local implementation by default. External implementers are not enabled unless
-  the user explicitly changes routing.
+- The project manager performs release preparation and validation after the
+  user activates this SOW. Publication remains separately approval-gated.
 
 Reviewers:
 
-- Use read-only reviewers from the approved pool before real publication.
+- External review is pending user authorization. Recommend whole-SOW review
+  after local validation and before publication; when authorized, follow the
+  system-wide `external-reviewers` skill.
 
-Repository boundary block for every external-agent prompt:
+Repository boundary block for every external-reviewer prompt:
 
 ```text
 CRITICAL REPOSITORY BOUNDARY:

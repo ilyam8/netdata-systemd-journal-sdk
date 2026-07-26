@@ -84,8 +84,7 @@ Do not use this skill for `documentation/` (internal notes, not published).
    reason).
 3. Run both validators locally; iterate until green.
 4. For new example shapes, extend the harness (preludes, fixtures,
-   substitutions) through the active SOW's implementer routing, with unit
-   tests.
+   substitutions) within the active SOW, with unit tests.
 5. Record docs changes in the active SOW.
 
 ## Evidence

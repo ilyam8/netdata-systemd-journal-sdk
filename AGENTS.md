@@ -128,20 +128,28 @@ explicitly asks to repair or upgrade the SOW framework.
 ### Roles
 
 - **User responsibilities:** purpose, scope decisions, design forks, risk acceptance, destructive approvals, and final product judgment.
-- **Project manager responsibilities:** SOW creation, phase planning, prompt writing, external-agent orchestration, reviewer coordination, evidence ledgers, status reporting, and gate enforcement.
-- **Implementer agent responsibilities:** code, tests, documentation, benchmark/profiling work, and implementation evidence for the assigned SOW.
+- **Project manager responsibilities:** SOW creation, phase planning, code, tests, documentation, benchmark/profiling work, implementation evidence, reviewer coordination, evidence ledgers, status reporting, and gate enforcement.
 - **Reviewer agent responsibilities:** independently review technical behavior and search for regressions.
 - **Reviewer agents review security:** identify vulnerabilities and unwanted side effects.
 - **Reviewer agents assess readiness:** decide whether the result is production-grade.
 
-The project manager does not personally perform the terminal technical review for implementation SOWs.
-Any exception needs an explicit user routing decision recorded in the active SOW.
-By default implementation can be delegated to external agents.
-The current user routing decision (2026-06-11) is: one external implementer model writes the code, and all other pool models are read-only reviewers; only `llm-netdata-cloud` models may be used. The selected implementer is `llm-netdata-cloud/minimax-m3-coder` (fallback `llm-netdata-cloud/glm-5.1`, with the failure recorded in the active SOW). The implementer model never reviews its own work. The project manager writes documentation prose, orchestrates, validates, and remains responsible for the outcome.
+External review is the default, user-waivable technical review gate for
+implementation SOWs. Before submitting code to GitHub, recommend external
+review when the current change set has not already been reviewed. Do not run
+external reviewers before the user authorizes them. Once authorized, standing
+authorization applies for the current conversation within any limits set by the
+user.
 
-Current review cadence: implement the whole active SOW, finish local validation, then run external reviewers against the complete SOW as one meaningful batch.
-Do not run external reviewers after small local edits or partial fixes unless the user explicitly asks for early review.
-An exception is allowed when a blocking design, security, or compatibility decision needs an independent read-only opinion before implementation can continue.
+The system-wide `external-reviewers` skill is the sole source of truth for
+available reviewers, model selection, harnesses, prompts, authorization scope,
+retries, and failure handling. Do not copy those volatile details into
+repository instructions. Review the complete active SOW after local validation
+as one meaningful batch; do not review trivial edits or partial churn.
+
+Historical note: this repository previously required implementation
+delegation. That mandate is neither required nor preferred now. Historical
+records may retain exact model names and execution trails, but those records
+must not be assumed to describe current practice.
 
 ### Required First Checks
 
@@ -159,7 +167,7 @@ Create a git worktree only when the user explicitly asks for it or approves it.
 
 ### Repository Boundary
 
-CRITICAL: Do not make changes outside this repository. This applies to all assistants and all delegated agents.
+CRITICAL: Do not make changes outside this repository. This applies to all assistants and external reviewers.
 
 Canonical external-agent prompt block:
 
@@ -295,7 +303,7 @@ Status and directory must agree:
 
 The successful terminal SOW status is `completed`. `done` is a directory name, not a status value. Never write `Status: done` or `Status: complete`.
 
-After each implementation chunk/SOW is implemented, reviewed, and verified, prefer committing that chunk before starting the next chunk. This preserves rollback points before subsequent external-agent work.
+After each implementation chunk/SOW is implemented, reviewed, and verified, prefer committing that chunk before starting the next chunk. This preserves rollback points before subsequent work.
 
 If `.agents/sow/audit.sh` fails, do not close the SOW and do not advance to the next chunk. Record the audit failure in the active SOW, repair it inside this repository, rerun the audit, and record the clean result.
 
@@ -449,13 +457,10 @@ Output/reference skills:
 - Do not implement daemon-only journalctl commands, including daemon sync, flush, rotate, and relinquish-var operations.
 - Common compression-library dependencies are allowed after dependency review. Journal parsing/writing must not depend on systemd/libjournal; CGO and linking to system journal libraries remain disallowed unless the user explicitly changes those separate constraints.
 - Before Netdata integration or stable release work advances, GitHub code scanning and Codacy analysis findings must be fixed or explicitly dispositioned under the active SOW policy. Raw SARIF, Codacy exports, and scanner logs must stay under `.local/`; durable artifacts may contain only sanitized aggregate summaries and evidence.
-- Current implementation routing (user decision 2026-06-11): code implementation is delegated to the external implementer model `llm-netdata-cloud/minimax-m3-coder` (fallback `llm-netdata-cloud/glm-5.1`, failure recorded in the active SOW), run in normal coding mode via `opencode run`. Only `llm-netdata-cloud` models may be used for implementer and reviewer runs. The project manager writes documentation prose and validates all delegated work.
-- Reviewer pool: `llm-netdata-cloud/glm-5.1`, `llm-netdata-cloud/kimi-k2.6`, `llm-netdata-cloud/mimo-v2.5-pro`, `llm-netdata-cloud/qwen3.7-plus`, `llm-netdata-cloud/minimax-m3-coder`, and `llm-netdata-cloud/deepseek-v4-pro`. The model acting as implementer for a SOW is excluded from reviewing that SOW; the other five review. The `qwen3.6-plus` entry was updated to `qwen3.7-plus` on 2026-06-11 to match the available pool.
 - Rust and Go sources are frozen for the 2026-06-11 docs-and-parity program (SOW-0103 through SOW-0106). Problems found in Rust or Go become pending SOWs; they are not fixed inside the program SOWs.
 - Current review cadence: finish the complete active SOW locally first, including local validation and SOW evidence.
-- After local validation, run the reviewer pool against the entire SOW and changed surface as one batch. Do not run reviewers after every small edit.
-- A phase cannot advance until the local implementation or explicitly approved implementer run has completed the active SOW and reviewer findings have been resolved or explicitly dispositioned in the SOW.
+- After local validation, recommend external review if it has not been authorized or explicitly waived. When authorized, follow the system-wide `external-reviewers` skill and review the entire SOW and changed surface as one batch.
+- A phase cannot advance until local implementation and validation have completed and external review has either completed with findings resolved or been explicitly waived by the user and recorded in the SOW.
 - After each verified chunk, prefer committing the chunk before starting the next work chunk, using explicit path staging only.
-- If the user re-enables external implementers, record the routing decision in the active SOW before running them.
 - After SOW-0003 completes, SOW-0005 (Go writer first) activates before SOW-0004, SOW-0006, SOW-0007, SOW-0008, SOW-0009, or SOW-0010. After SOW-0005 completes, continue according to the active SOW dependency chain, but only one implementation SOW may be active at a time.
 - Reviewer agents may run in parallel within the active SOW; implementation SOWs must not run in parallel unless the user explicitly changes the one-SOW-at-a-time rule.

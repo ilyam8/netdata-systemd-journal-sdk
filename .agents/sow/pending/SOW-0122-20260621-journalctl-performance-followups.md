@@ -164,17 +164,20 @@ Pending activation.
 3. Optimize only paths with measurable payoff or release risk.
 4. Validate parity and performance.
 
-## Delegation Plan
+## Implementation And Review Plan
 
-Implementer:
+Implementation:
 
-- Pending user activation and routing decision.
+- The implementation plan remains pending user activation and completion of the
+  pre-implementation gate.
 
 Reviewers:
 
-- Pending user activation.
+- External review authorization is pending activation. Recommend whole-SOW
+  review after local validation and before GitHub submission; when authorized,
+  follow the system-wide `external-reviewers` skill.
 
-Repository boundary block for every external-agent prompt:
+Repository boundary block for every external-reviewer prompt:
 
 ```text
 CRITICAL REPOSITORY BOUNDARY:

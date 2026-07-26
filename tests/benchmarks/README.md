@@ -74,6 +74,39 @@ modes. The value is `1` by default, `0` disables explicit SDK live publication,
 and `N > 1` publishes after every `N` appended entries. Rust benchmark results
 also record `mmap_strategy` when the internal writer mapping switch is used.
 
+The default writer-core workload remains `mixed-cardinality-32-fields`.
+`--workload netflow-v5-repeating-256` is a focused Rust-only diagnostic for a
+synthetic NetFlow v5 row shape:
+
+- 29 structured application fields and 450 application `KEY=value` bytes;
+- one fixed raw `_BOOT_ID=...` field prepended to the low-level call;
+- 30 low-level ENTRY items and 491 total logical DATA bytes;
+- 256 repeating identities, with 385 distinct application DATA payloads;
+- source-address cardinality 100, destination-address cardinality 3, and
+  input-interface cardinality 256.
+
+This workload supports only the direct Rust surface. The shared runner rejects
+it unless `--languages rust` is selected exactly, and reports record the
+workload and row-shape metadata. Treat it as a causal writer-path diagnostic,
+not as a universal SDK or NetFlow capacity claim.
+
+Focused repeated-DATA measurement:
+
+```bash
+python3 tests/benchmarks/run_writer_core_benchmarks.py \
+  --languages rust \
+  --workload netflow-v5-repeating-256 \
+  --rows 100000 \
+  --warmups 2 \
+  --repetitions 10 \
+  --format compact \
+  --api-mode structured-field \
+  --rust-trusted-unique-payloads \
+  --live-publish-every-entries 0 \
+  --rust-mmap-strategy windowed \
+  --rust-compare-api-modes
+```
+
 Example:
 
 ```bash
@@ -155,6 +188,11 @@ Writer-core reports always use this language order:
 Writer-core change reports also include a `Configuration Differences`
 subsection when the same language was measured with different API modes or
 access strategies between the before and after artifacts.
+The reporter rejects writer before/after comparisons when their workload
+identity or jointly recorded row-shape metadata differs. Reports with an
+explicit `workload` must contain all four row-shape fields; legacy reports
+without `workload` retain compatibility with complete reports for the default
+workload.
 
 The reporter does not infer whether a benchmark is a win or regression. Pass an
 explicit `--conclusion` value after reviewing the numbers. Accepted conclusion

@@ -1,6 +1,6 @@
 # SOW Status
 
-Last updated: 2026-07-06
+Last updated: 2026-07-26
 
 This root file is a short convenience index. The canonical detailed SOW ledger
 is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
@@ -11,6 +11,10 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Pending
 
+- `SOW-0135-20260726-rust-writer-entry-link-state-reuse.md` - open. Reuses
+  entry-local resolved DATA link metadata and one mutable compact-tail guard
+  without persistent cache or public/file-format changes. Ready for activation
+  after completed SOW-0134.
 - `SOW-0125-20260625-netdata-filter-operators-gap-analysis.md` - open, parked
   by user decision on 2026-06-25. Preserves string/numeric operator support
   matrix and semantic decisions; not executable until explicitly resumed.
@@ -31,6 +35,10 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 - `SOW-0098-20260607-rust-legacy-core-duplication-debt.md` - open. Follow-up from the Codacy Rust/Go metrics audit for real Rust `jf`/`journal-core` duplication reduction.
 ## Done
 
+- `SOW-0134-20260726-rust-writer-data-link-performance.md` - completed.
+  Added the exact Rust-only repeating-256 writer workload, preserved historical
+  defaults and compact/regular raw/structured bytes, and isolated repeated DATA
+  lookup/link/mmap-validation work for the selected production follow-up.
 - `SOW-0131-20260706-directory-unique-cache-and-go-parity.md` - completed.
   Rust and Go directory readers now keep an exact 8-entry per-open-reader LRU
   cache of directory-wide unique payloads built from per-file FIELD/DATA
@@ -165,7 +173,9 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 - SOW-0033 completed full verification parity for the supported fixture envelope. `run_verify_matrix.py` passes against stock `journalctl --verify --file` and Rust, Go, Node.js, and Python verification paths for 9 positive files and 12 negative corruption classes on `systemd 260 (260.1-2-manjaro)`.
 - SOW-0063 tracks mandatory cross-platform SDK support for Linux, FreeBSD, macOS, and Windows. Stock systemd validation remains Linux-based; files generated on non-Linux targets must be validated on Linux with stock systemd tooling after transfer.
 - SOW-0064 is closed. SOW-0076 independently repeated selective real-corpus verification after SOW-0064 and is also closed.
-- SOW-0065 tracks the future parallel language parity/performance closure phase after Rust, portability, corpus, and integration gates are stable. Actual git worktree creation and external implementer routing still require explicit user approval at activation time.
+- SOW-0065 is closed and superseded by the completed sequential
+  docs-and-parity program. Any future language parity or performance work must
+  be activated through the current SOW rules.
 - SOW-0066 tracks the final `v1.0.0` release and language registry publication. Registry credentials must never be written to durable artifacts.
 - Byte-for-byte writer identity is the target for deterministic uncompressed journals. Any feature slice that cannot be made byte-identical must return with evidence before the acceptance condition is changed.
 - The external systemd source checkout is read-only for this project. Build outputs and generated files must remain inside this repository or `/tmp`.

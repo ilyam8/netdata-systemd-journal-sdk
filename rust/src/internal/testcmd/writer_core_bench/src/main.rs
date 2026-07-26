@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use journal_core::file::{
     Compression, DEFAULT_COMPRESS_THRESHOLD, EntryField, EntryWriteOptions,
     ExperimentalMmapStrategy, JournalFile, JournalFileOptions, JournalState, JournalWriter,
@@ -21,9 +21,56 @@ const SEQNUM_ID: &str = "22222222222222222222222222222222";
 const FILE_ID: &str = "33333333333333333333333333333333";
 const BASE_REALTIME_USEC: u64 = 1_700_000_000_000_000;
 const BASE_MONOTONIC_USEC: u64 = 50_000_000;
-const FIELDS_PER_ROW: usize = 32;
+const MIXED_APPLICATION_FIELDS_PER_ROW: usize = 32;
+const NETFLOW_APPLICATION_FIELDS_PER_ROW: usize = 29;
+const NETFLOW_BOOT_FIELD: &[u8] = b"_BOOT_ID=0123456789abcdef0123456789abcdef";
 const DEFAULT_MAX_SIZE_BYTES: u64 = 128 * 1024 * 1024;
 const FIELD_HASH_BUCKETS: usize = 1023;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum Workload {
+    #[value(name = "mixed-cardinality-32-fields")]
+    MixedCardinality32Fields,
+    #[value(name = "netflow-v5-repeating-256")]
+    NetflowV5Repeating256,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WorkloadMetadata {
+    name: &'static str,
+    application_fields_per_row: usize,
+    entry_items_per_row: usize,
+    application_logical_bytes_per_row: usize,
+    total_logical_data_bytes_per_row: usize,
+}
+
+impl Workload {
+    fn metadata(self) -> WorkloadMetadata {
+        match self {
+            Self::MixedCardinality32Fields => WorkloadMetadata {
+                name: "mixed-cardinality-32-fields",
+                application_fields_per_row: MIXED_APPLICATION_FIELDS_PER_ROW,
+                entry_items_per_row: MIXED_APPLICATION_FIELDS_PER_ROW,
+                application_logical_bytes_per_row: 817,
+                total_logical_data_bytes_per_row: 817,
+            },
+            Self::NetflowV5Repeating256 => WorkloadMetadata {
+                name: "netflow-v5-repeating-256",
+                application_fields_per_row: NETFLOW_APPLICATION_FIELDS_PER_ROW,
+                entry_items_per_row: NETFLOW_APPLICATION_FIELDS_PER_ROW + 1,
+                application_logical_bytes_per_row: 450,
+                total_logical_data_bytes_per_row: 491,
+            },
+        }
+    }
+
+    fn raw_entry_prefix(self) -> Option<&'static [u8]> {
+        match self {
+            Self::MixedCardinality32Fields => None,
+            Self::NetflowV5Repeating256 => Some(NETFLOW_BOOT_FIELD),
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -31,6 +78,8 @@ struct Args {
     output: PathBuf,
     #[arg(long, default_value_t = 100_000)]
     rows: usize,
+    #[arg(long, value_enum, default_value = "mixed-cardinality-32-fields")]
+    workload: Workload,
     #[arg(long, default_value = "compact")]
     format: String,
     #[arg(long, default_value = "online")]
@@ -67,7 +116,7 @@ fn absolute_path(path: &Path) -> Result<PathBuf> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct BenchField {
     raw: Vec<u8>,
     name: Vec<u8>,
@@ -90,7 +139,14 @@ impl BenchField {
     }
 }
 
-fn make_rows(rows: usize) -> Vec<Vec<BenchField>> {
+fn make_rows(workload: Workload, rows: usize) -> Vec<Vec<BenchField>> {
+    match workload {
+        Workload::MixedCardinality32Fields => make_mixed_cardinality_rows(rows),
+        Workload::NetflowV5Repeating256 => make_netflow_v5_repeating_rows(rows),
+    }
+}
+
+fn make_mixed_cardinality_rows(rows: usize) -> Vec<Vec<BenchField>> {
     let fixed: Vec<BenchField> = vec![
         BenchField::new("TEST_ID", "deterministic-ingestion-performance"),
         BenchField::new("PERF_PROFILE", "mixed-cardinality-32-fields"),
@@ -122,7 +178,7 @@ fn make_rows(rows: usize) -> Vec<Vec<BenchField>> {
 
     let mut all = Vec::with_capacity(rows);
     for row in 0..rows {
-        let mut fields = Vec::with_capacity(FIELDS_PER_ROW);
+        let mut fields = Vec::with_capacity(MIXED_APPLICATION_FIELDS_PER_ROW);
         fields.extend(fixed.iter().cloned());
         for offset in 0..12 {
             fields.push(low_values[offset][row % 16].clone());
@@ -139,6 +195,78 @@ fn make_rows(rows: usize) -> Vec<Vec<BenchField>> {
         all.push(fields);
     }
     all
+}
+
+fn make_netflow_v5_repeating_rows(rows: usize) -> Vec<Vec<BenchField>> {
+    let fixed = [
+        ("FLOW_VERSION", "v5"),
+        ("EXPORTER_IP", "127.0.0.1"),
+        ("EXPORTER_PORT", "12345"),
+        ("EXPORTER_NAME", "127_0_0_1"),
+        ("ETYPE", "2048"),
+        ("PROTOCOL", "6"),
+        ("BYTES", "64"),
+        ("PACKETS", "1"),
+        ("FLOWS", "1"),
+    ];
+    let fixed_after_addresses = [
+        ("SRC_PREFIX", "192.0.2.0/24"),
+        ("DST_PREFIX", "198.51.100.0/24"),
+        ("SRC_MASK", "24"),
+        ("DST_MASK", "24"),
+        ("SRC_AS", "64512"),
+        ("DST_AS", "64513"),
+    ];
+    let fixed_after_input = [
+        ("OUT_IF", "60000"),
+        ("NEXT_HOP", "192.0.2.1"),
+        ("SRC_PORT", "10000"),
+        ("DST_PORT", "20000"),
+        ("FLOW_START_USEC", "1699999950000000"),
+        ("FLOW_END_USEC", "1699999950001000"),
+        ("IPTOS", "0"),
+        ("TCP_FLAGS", "18"),
+        ("RAW_BYTES", "64"),
+        ("RAW_PACKETS", "1"),
+        ("SAMPLING_RATE", "1"),
+    ];
+
+    let mut all = Vec::with_capacity(rows);
+    for row in 0..rows {
+        let identity = row % 256;
+        let mut fields = Vec::with_capacity(NETFLOW_APPLICATION_FIELDS_PER_ROW);
+        fields.extend(
+            fixed
+                .iter()
+                .map(|(name, value)| BenchField::new(*name, *value)),
+        );
+        fields.push(BenchField::new(
+            "SRC_ADDR",
+            format!("192.0.2.{}", 100 + identity % 100),
+        ));
+        fields.push(BenchField::new(
+            "DST_ADDR",
+            format!("198.51.100.{}", 100 + identity / 100),
+        ));
+        fields.extend(
+            fixed_after_addresses
+                .iter()
+                .map(|(name, value)| BenchField::new(*name, *value)),
+        );
+        fields.push(BenchField::new("IN_IF", format!("{}", 10_000 + identity)));
+        fields.extend(
+            fixed_after_input
+                .iter()
+                .map(|(name, value)| BenchField::new(*name, *value)),
+        );
+        all.push(fields);
+    }
+    all
+}
+
+#[cfg(test)]
+fn application_logical_bytes(fields: &[BenchField]) -> usize {
+    fields.iter().map(|field| field.raw.len()).sum()
 }
 
 fn data_hash_buckets_for_max_size(max_size: u64) -> usize {
@@ -392,8 +520,9 @@ fn open_directory_log(cfg: &DirectoryRunConfig<'_>) -> Result<Log> {
 
 fn append_directory_rows(log: &mut Log, rows: &[Vec<BenchField>], api_mode: &str) -> Result<usize> {
     let mut records = 0usize;
-    let mut entry_fields: Vec<&[u8]> = Vec::with_capacity(FIELDS_PER_ROW);
-    let mut structured_refs: Vec<StructuredField<'_>> = Vec::with_capacity(FIELDS_PER_ROW);
+    let mut entry_fields: Vec<&[u8]> = Vec::with_capacity(MIXED_APPLICATION_FIELDS_PER_ROW);
+    let mut structured_refs: Vec<StructuredField<'_>> =
+        Vec::with_capacity(MIXED_APPLICATION_FIELDS_PER_ROW);
     let structured = api_mode == "structured-field";
 
     for (index, fields) in rows.iter().enumerate() {
@@ -447,7 +576,7 @@ fn directory_report(
 ) -> Value {
     json!({
         "records": records,
-        "fields_per_row": FIELDS_PER_ROW,
+        "fields_per_row": MIXED_APPLICATION_FIELDS_PER_ROW,
         "surface": "directory",
         "append_seconds": append_seconds,
         "append_rows_per_second": if append_seconds > 0.0 { records as f64 / append_seconds } else { 0.0 },
@@ -494,7 +623,7 @@ struct BenchConfig {
 fn run(args: Args) -> Result<Value> {
     let cfg = parse_bench_config(&args)?;
     let precompute_start = Instant::now();
-    let rows = make_rows(args.rows);
+    let rows = make_rows(args.workload, args.rows);
     let precompute_seconds = precompute_start.elapsed().as_secs_f64();
 
     if args.surface == "directory" {
@@ -529,6 +658,7 @@ fn parse_bench_config(args: &Args) -> Result<BenchConfig> {
     if args.surface != "direct" && args.surface != "directory" {
         return Err(anyhow!("invalid --surface: {}", args.surface));
     }
+    validate_surface_workload(&args.surface, args.workload)?;
     let output = absolute_path(&args.output)?;
     let _ = fs::remove_file(&output);
     Ok(BenchConfig {
@@ -538,6 +668,16 @@ fn parse_bench_config(args: &Args) -> Result<BenchConfig> {
         live_publish_every_entries: resolve_live_publish_every_entries(args)?,
         mmap_strategy: parse_mmap_strategy(&args.mmap_strategy)?,
     })
+}
+
+fn validate_surface_workload(surface: &str, workload: Workload) -> Result<()> {
+    if surface == "directory" && workload != Workload::MixedCardinality32Fields {
+        return Err(anyhow!(
+            "--workload {} supports only --surface direct",
+            workload.metadata().name
+        ));
+    }
+    Ok(())
 }
 
 fn run_direct(
@@ -596,14 +736,17 @@ fn append_direct_rows(
     writer: &mut JournalWriter,
 ) -> Result<usize> {
     let mut records = 0usize;
-    let mut entry_fields: Vec<EntryField<'_>> = Vec::with_capacity(FIELDS_PER_ROW);
-    let mut structured_refs: Vec<StructuredField<'_>> = Vec::with_capacity(FIELDS_PER_ROW);
+    let entry_items_per_row = args.workload.metadata().entry_items_per_row;
+    let mut entry_fields: Vec<EntryField<'_>> = Vec::with_capacity(entry_items_per_row);
+    let mut structured_refs: Vec<StructuredField<'_>> =
+        Vec::with_capacity(args.workload.metadata().application_fields_per_row);
     let write_options =
         EntryWriteOptions::default().trusted_unique_payloads(args.trusted_unique_payloads);
     for (index, fields) in rows.iter().enumerate() {
         append_direct_row(
             fields,
             index,
+            args.workload,
             structured,
             journal_file,
             writer,
@@ -619,6 +762,7 @@ fn append_direct_rows(
 fn append_direct_row<'a>(
     fields: &'a [BenchField],
     index: usize,
+    workload: Workload,
     structured: bool,
     journal_file: &mut JournalFile<MmapMut>,
     writer: &mut JournalWriter,
@@ -628,7 +772,7 @@ fn append_direct_row<'a>(
 ) -> Result<()> {
     let realtime = BASE_REALTIME_USEC + index as u64 * 500;
     let monotonic = BASE_MONOTONIC_USEC + index as u64 * 50;
-    if structured {
+    if !requires_entry_fields_api(workload, structured) {
         structured_refs.clear();
         structured_refs.extend(fields.iter().map(BenchField::structured));
         writer.add_entry_structured_with_options(
@@ -639,12 +783,7 @@ fn append_direct_row<'a>(
             write_options,
         )?;
     } else {
-        entry_fields.clear();
-        entry_fields.extend(
-            fields
-                .iter()
-                .map(|field| EntryField::raw(field.raw.as_slice())),
-        );
+        prepare_direct_entry_fields(fields, workload, structured, entry_fields);
         writer.add_entry_fields_with_options(
             journal_file,
             entry_fields.iter().copied(),
@@ -654,6 +793,35 @@ fn append_direct_row<'a>(
         )?;
     }
     Ok(())
+}
+
+fn requires_entry_fields_api(workload: Workload, structured: bool) -> bool {
+    !structured || workload.raw_entry_prefix().is_some()
+}
+
+fn prepare_direct_entry_fields<'a>(
+    fields: &'a [BenchField],
+    workload: Workload,
+    structured: bool,
+    entry_fields: &mut Vec<EntryField<'a>>,
+) {
+    entry_fields.clear();
+    if let Some(prefix) = workload.raw_entry_prefix() {
+        entry_fields.push(EntryField::raw(prefix));
+    }
+    if structured {
+        entry_fields.extend(
+            fields
+                .iter()
+                .map(|field| EntryField::structured(&field.name, &field.value)),
+        );
+    } else {
+        entry_fields.extend(
+            fields
+                .iter()
+                .map(|field| EntryField::raw(field.raw.as_slice())),
+        );
+    }
 }
 
 struct DirectReport<'a> {
@@ -675,9 +843,15 @@ struct DirectReport<'a> {
 }
 
 fn direct_report(report: DirectReport<'_>) -> Value {
+    let workload = report.args.workload.metadata();
     json!({
         "records": report.records,
-        "fields_per_row": FIELDS_PER_ROW,
+        "fields_per_row": workload.application_fields_per_row,
+        "workload": workload.name,
+        "application_fields_per_row": workload.application_fields_per_row,
+        "entry_items_per_row": workload.entry_items_per_row,
+        "application_logical_bytes_per_row": workload.application_logical_bytes_per_row,
+        "total_logical_data_bytes_per_row": workload.total_logical_data_bytes_per_row,
         "surface": "direct",
         "append_seconds": report.append_seconds,
         "append_rows_per_second": if report.append_seconds > 0.0 { report.records as f64 / report.append_seconds } else { 0.0 },
@@ -707,4 +881,157 @@ fn direct_report(report: DirectReport<'_>) -> Value {
         "final_state": report.args.final_state,
         "errors": [],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn field_values(rows: &[Vec<BenchField>], name: &[u8]) -> HashSet<Vec<u8>> {
+        rows.iter()
+            .flat_map(|row| row.iter())
+            .filter(|field| field.name == name)
+            .map(|field| field.value.clone())
+            .collect()
+    }
+
+    #[test]
+    fn mixed_cardinality_default_row_shape_is_unchanged() {
+        let rows = make_rows(Workload::MixedCardinality32Fields, 2);
+        let metadata = Workload::MixedCardinality32Fields.metadata();
+
+        assert_eq!(metadata.name, "mixed-cardinality-32-fields");
+        assert_eq!(metadata.application_fields_per_row, 32);
+        assert_eq!(metadata.entry_items_per_row, 32);
+        assert_eq!(metadata.application_logical_bytes_per_row, 817);
+        assert_eq!(metadata.total_logical_data_bytes_per_row, 817);
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|row| row.len() == 32));
+        assert!(rows.iter().all(|row| application_logical_bytes(row) == 817));
+
+        let expected_fixed = [
+            b"TEST_ID=deterministic-ingestion-performance".as_slice(),
+            b"PERF_PROFILE=mixed-cardinality-32-fields".as_slice(),
+            b"HOST_CLASS=synthetic-edge".as_slice(),
+            b"SOURCE_KIND=journal-sdk-benchmark".as_slice(),
+        ];
+        for (field, expected) in rows[0].iter().take(4).zip(expected_fixed) {
+            assert_eq!(field.raw, expected);
+        }
+        for offset in 0..12 {
+            assert_eq!(
+                rows[0][4 + offset].raw,
+                format!("LOW_CARD_{offset:02}=low-{offset:02}-00").as_bytes()
+            );
+            assert_eq!(
+                rows[1][4 + offset].raw,
+                format!("LOW_CARD_{offset:02}=low-{offset:02}-01").as_bytes()
+            );
+        }
+        for offset in 0..8 {
+            assert_eq!(
+                rows[0][16 + offset].raw,
+                format!("MED_CARD_{offset:02}=medium-{offset:02}-0000").as_bytes()
+            );
+            assert_eq!(
+                rows[1][16 + offset].raw,
+                format!("MED_CARD_{offset:02}=medium-{offset:02}-0001").as_bytes()
+            );
+            assert_eq!(
+                rows[0][24 + offset].raw,
+                format!("HIGH_CARD_{offset:02}=high-{offset:02}-000000").as_bytes()
+            );
+            assert_eq!(
+                rows[1][24 + offset].raw,
+                format!("HIGH_CARD_{offset:02}=high-{offset:02}-000001").as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn netflow_repeating_workload_matches_low_level_writer_shape() {
+        let rows = make_rows(Workload::NetflowV5Repeating256, 512);
+        let metadata = Workload::NetflowV5Repeating256.metadata();
+
+        assert_eq!(metadata.name, "netflow-v5-repeating-256");
+        assert_eq!(metadata.application_fields_per_row, 29);
+        assert_eq!(metadata.entry_items_per_row, 30);
+        assert_eq!(metadata.application_logical_bytes_per_row, 450);
+        assert_eq!(metadata.total_logical_data_bytes_per_row, 491);
+        assert_eq!(NETFLOW_BOOT_FIELD.len(), 41);
+        assert_eq!(
+            metadata.total_logical_data_bytes_per_row,
+            metadata.application_logical_bytes_per_row + NETFLOW_BOOT_FIELD.len()
+        );
+        assert_eq!(
+            NETFLOW_BOOT_FIELD.strip_prefix(b"_BOOT_ID="),
+            Some(BOOT_ID.as_bytes())
+        );
+        assert_eq!(rows.len(), 512);
+        assert!(rows.iter().all(|row| row.len() == 29));
+        assert!(rows.iter().all(|row| application_logical_bytes(row) == 450));
+        assert_eq!(rows[..256], rows[256..]);
+
+        assert_eq!(field_values(&rows[..256], b"SRC_ADDR").len(), 100);
+        assert_eq!(field_values(&rows[..256], b"DST_ADDR").len(), 3);
+        assert_eq!(field_values(&rows[..256], b"IN_IF").len(), 256);
+
+        let application_payloads: HashSet<Vec<u8>> = rows[..256]
+            .iter()
+            .flat_map(|row| row.iter().map(|field| field.raw.clone()))
+            .collect();
+        assert_eq!(application_payloads.len(), 385);
+        assert!(!application_payloads.contains(NETFLOW_BOOT_FIELD));
+
+        for structured in [false, true] {
+            assert!(requires_entry_fields_api(
+                Workload::NetflowV5Repeating256,
+                structured
+            ));
+            let mut entry_fields = Vec::new();
+            prepare_direct_entry_fields(
+                &rows[0],
+                Workload::NetflowV5Repeating256,
+                structured,
+                &mut entry_fields,
+            );
+            assert_eq!(entry_fields.len(), metadata.entry_items_per_row);
+            assert!(matches!(
+                entry_fields[0],
+                EntryField::Raw(payload) if payload == NETFLOW_BOOT_FIELD
+            ));
+            for (entry_field, application_field) in entry_fields[1..].iter().zip(rows[0].iter()) {
+                match (structured, entry_field) {
+                    (false, EntryField::Raw(payload)) => {
+                        assert_eq!(*payload, application_field.raw)
+                    }
+                    (true, EntryField::Structured(field)) => {
+                        assert_eq!(field.name, application_field.name);
+                        assert_eq!(field.value, application_field.value);
+                    }
+                    _ => panic!("unexpected low-level entry field shape"),
+                }
+            }
+        }
+        assert!(!requires_entry_fields_api(
+            Workload::MixedCardinality32Fields,
+            true
+        ));
+        assert!(requires_entry_fields_api(
+            Workload::MixedCardinality32Fields,
+            false
+        ));
+    }
+
+    #[test]
+    fn netflow_repeating_workload_is_direct_surface_only() {
+        assert!(validate_surface_workload("direct", Workload::NetflowV5Repeating256).is_ok());
+        let error =
+            validate_surface_workload("directory", Workload::NetflowV5Repeating256).unwrap_err();
+        assert!(error.to_string().contains("supports only --surface direct"));
+        assert!(
+            validate_surface_workload("directory", Workload::MixedCardinality32Fields,).is_ok()
+        );
+    }
 }

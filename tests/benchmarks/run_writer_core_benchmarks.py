@@ -3,7 +3,7 @@
 
 This harness measures the SDK/systemd append loop separately from dataset
 generation, JSON parsing, final close/sync, and journal verification. Each
-driver pre-materializes the deterministic 32-field rows before starting its
+driver pre-materializes its selected deterministic rows before starting its
 append timer, then reports append rows/sec from the timed append loop only.
 """
 
@@ -27,6 +27,21 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUT = ROOT / ".local" / "benchmarks" / "writer-core"
 BIN_DIR = ROOT / ".local" / "benchmarks" / "bin"
 LANGUAGES = ("systemd", "rust", "go")
+DEFAULT_WORKLOAD = "mixed-cardinality-32-fields"
+WORKLOADS = {
+    DEFAULT_WORKLOAD: {
+        "application_fields_per_row": 32,
+        "entry_items_per_row": 32,
+        "application_logical_bytes_per_row": 817,
+        "total_logical_data_bytes_per_row": 817,
+    },
+    "netflow-v5-repeating-256": {
+        "application_fields_per_row": 29,
+        "entry_items_per_row": 30,
+        "application_logical_bytes_per_row": 450,
+        "total_logical_data_bytes_per_row": 491,
+    },
+}
 INCOMPATIBLE_COMPRESSED_XZ = 1 << 0
 INCOMPATIBLE_COMPRESSED_LZ4 = 1 << 1
 INCOMPATIBLE_COMPRESSED_ZSTD = 1 << 3
@@ -128,11 +143,15 @@ def bench_command(
     journal_format: str,
     final_state: str,
     max_size_bytes: int,
+    workload: str,
     api_mode: str,
     rust_trusted_unique_payloads: bool,
     live_publish_every_entries: int,
     rust_mmap_strategy: str,
 ) -> list[str]:
+    workload_metadata(workload)
+    if workload != DEFAULT_WORKLOAD and language != "rust":
+        raise ValueError(f"workload {workload!r} is supported only by the Rust driver")
     cmd = [
         *base,
         "--rows",
@@ -150,10 +169,39 @@ def bench_command(
         cmd.extend(["--live-publish-every-entries", str(live_publish_every_entries)])
         cmd.extend(["--api-mode", api_mode])
     if language == "rust":
+        cmd.extend(["--workload", workload])
         cmd.extend(["--mmap-strategy", rust_mmap_strategy])
         if rust_trusted_unique_payloads:
             cmd.append("--trusted-unique-payloads")
     return cmd
+
+
+def workload_metadata(workload: str) -> dict[str, int]:
+    try:
+        return WORKLOADS[workload]
+    except KeyError as exc:
+        raise ValueError(f"unsupported writer workload: {workload}") from exc
+
+
+def driver_workload_errors(driver: dict[str, Any], workload: str) -> list[str]:
+    expected: dict[str, Any] = {"workload": workload, **workload_metadata(workload)}
+    errors = []
+    for field, expected_value in expected.items():
+        actual = driver.get(field)
+        if actual != expected_value:
+            errors.append(
+                f"Rust driver {field} mismatch: got {actual!r}, want {expected_value!r}"
+            )
+    return errors
+
+
+def validate_workload_languages(workload: str, languages: list[str]) -> None:
+    workload_metadata(workload)
+    if workload != DEFAULT_WORKLOAD and languages != ["rust"]:
+        raise ValueError(
+            f"workload {workload!r} requires exactly '--languages rust'; "
+            f"got {languages!r}"
+        )
 
 
 def parse_time_stats(path: Path) -> dict[str, Any]:
@@ -277,7 +325,9 @@ def rust_api_mode_byte_identity(
         "kind": "rust-api-mode-byte-identity",
         "status": status,
         "rows": args.rows,
-        "fields_per_row": 32,
+        "workload": args.workload,
+        "fields_per_row": workload_metadata(args.workload)["application_fields_per_row"],
+        **workload_metadata(args.workload),
         "format": args.format,
         "final_state": args.final_state,
         "max_size_bytes": args.max_size_bytes,
@@ -307,6 +357,7 @@ def rust_api_mode_measurement(
         journal_format=args.format,
         final_state=args.final_state,
         max_size_bytes=args.max_size_bytes,
+        workload=args.workload,
         api_mode=mode,
         rust_trusted_unique_payloads=args.rust_trusted_unique_payloads,
         live_publish_every_entries=live_publish_every_entries,
@@ -335,6 +386,7 @@ def rust_api_mode_result(
     verification = verify_journal(journal_path) if not args.skip_verify and exists else None
     records = int(driver.get("records", 0) or 0)
     errors = list(driver.get("errors", []) or [])
+    errors.extend(driver_workload_errors(driver, args.workload))
     return {
         "api_mode": mode,
         "command": cmd,
@@ -424,6 +476,7 @@ def one_measurement(
         journal_format=args.format,
         final_state=args.final_state,
         max_size_bytes=args.max_size_bytes,
+        workload=args.workload,
         api_mode=args.api_mode,
         rust_trusted_unique_payloads=args.rust_trusted_unique_payloads,
         live_publish_every_entries=live_publish_every_entries,
@@ -437,6 +490,8 @@ def one_measurement(
     file_size = journal_path.stat().st_size if journal_path.exists() else 0
     records = int(driver.get("records", 0) or 0)
     errors = list(driver.get("errors", []) or [])
+    if language == "rust":
+        errors.extend(driver_workload_errors(driver, args.workload))
     structure = quick_header_check(journal_path, compact=args.format == "compact") if journal_path.exists() else {
         "status": "FAIL",
         "error": "journal file missing",
@@ -570,6 +625,19 @@ def summarize_language(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def driver_field_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
+        "workloads": sorted_driver_workload_values(rows, "workload"),
+        "application_fields_per_row": sorted_driver_workload_values(
+            rows, "application_fields_per_row"
+        ),
+        "entry_items_per_row": sorted_driver_workload_values(
+            rows, "entry_items_per_row"
+        ),
+        "application_logical_bytes_per_row": sorted_driver_workload_values(
+            rows, "application_logical_bytes_per_row"
+        ),
+        "total_logical_data_bytes_per_row": sorted_driver_workload_values(
+            rows, "total_logical_data_bytes_per_row"
+        ),
         "api_modes": sorted_driver_strings(rows, "api_mode"),
         "live_publication": sorted_driver_strings(rows, "live_publication"),
         "live_publish_every_entries": sorted_driver_ints(rows, "live_publish_every_entries", -1),
@@ -578,6 +646,19 @@ def driver_field_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "field_hash_table_buckets": sorted_driver_ints(rows, "field_hash_table_buckets", 0),
         "max_size_bytes": sorted_driver_ints(rows, "max_size_bytes", 0),
     }
+
+
+def sorted_driver_workload_values(rows: list[dict[str, Any]], field: str) -> list[Any]:
+    values = set()
+    for row in rows:
+        driver = row["driver"]
+        workload = str(driver.get("workload", DEFAULT_WORKLOAD))
+        if field == "workload":
+            values.add(workload)
+        else:
+            metadata = workload_metadata(workload)
+            values.add(int(driver.get(field, metadata[field])))
+    return sorted(values)
 
 
 def sorted_driver_strings(rows: list[dict[str, Any]], field: str) -> list[str]:
@@ -690,6 +771,15 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--languages", nargs="+", choices=LANGUAGES, default=list(LANGUAGES))
     parser.add_argument("--rows", type=int, default=100_000)
+    parser.add_argument(
+        "--workload",
+        choices=tuple(WORKLOADS),
+        default=DEFAULT_WORKLOAD,
+        help=(
+            "Deterministic row corpus. Non-default workloads are Rust-only "
+            "diagnostics and require exactly '--languages rust'."
+        ),
+    )
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUT)
@@ -736,7 +826,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="After benchmark runs, write the same Rust corpus through raw and structured APIs and require byte identity.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    try:
+        validate_workload_languages(args.workload, args.languages)
+    except ValueError as err:
+        parser.error(str(err))
+    return args
 
 
 def timestamp_id() -> str:
@@ -753,6 +848,8 @@ def writer_core_profile(args: argparse.Namespace, live_publish_every_entries: in
         f"api-{args.api_mode}",
         f"live-every-{live_publish_every_entries}",
     ]
+    if args.workload != DEFAULT_WORKLOAD:
+        profile_parts.append(f"workload-{args.workload}")
     if "rust" in args.languages:
         if args.rust_trusted_unique_payloads:
             profile_parts.append("trusted-unique")
@@ -856,6 +953,7 @@ def writer_core_report(
     live_publish_every_entries: int,
     rust_api_mode_compare: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    workload = workload_metadata(args.workload)
     report = {
         "benchmark": "writer-core",
         "profile": profile,
@@ -865,7 +963,9 @@ def writer_core_report(
             "fss": False,
             "final_state": args.final_state,
             "rows": args.rows,
-            "fields_per_row": 32,
+            "workload": args.workload,
+            "fields_per_row": workload["application_fields_per_row"],
+            **workload,
             "repetitions": args.repetitions,
             "warmups": args.warmups,
             "languages": args.languages,

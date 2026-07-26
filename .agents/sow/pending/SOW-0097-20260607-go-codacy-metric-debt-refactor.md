@@ -354,18 +354,20 @@ User decision on 2026-06-21:
    decomposition.
 4. Validate behavior, performance, and Codacy metric movement.
 
-## Delegation Plan
+## Implementation And Review Plan
 
-Implementer:
+Implementation:
 
-- Local implementation by the project manager unless the user changes routing.
+- The project manager implements this SOW after activation and completion of its
+  pre-implementation gate.
 
 Reviewers:
 
-- Run the approved reviewer pool after the complete SOW implementation and
-  local validation.
+- External review is pending user authorization. Recommend whole-SOW review
+  after local validation and before GitHub submission; when authorized, follow
+  the system-wide `external-reviewers` skill.
 
-Repository boundary block for every external-agent prompt:
+Repository boundary block for every external-reviewer prompt:
 
 ```text
 CRITICAL REPOSITORY BOUNDARY:

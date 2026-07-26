@@ -229,17 +229,19 @@ Open decisions:
 2. Resume only when the user explicitly asks to continue operator design or implementation.
 3. Resolve all open decisions before any code changes.
 
-## Delegation Plan
+## Implementation And Review Plan
 
-Implementer:
+Implementation:
 
-- No implementer is assigned while parked.
+- No implementation occurs while this SOW is parked.
 
 Reviewers:
 
-- No reviewer gate is required while parked. When resumed for implementation, use the normal read-only reviewer pool after local validation.
+- No reviewer gate is required while parked. When resumed, recommend whole-SOW
+  external review after local validation and before GitHub submission; when
+  authorized, follow the system-wide `external-reviewers` skill.
 
-Repository boundary block for every external-agent prompt:
+Repository boundary block for every external-reviewer prompt:
 
 ```text
 CRITICAL REPOSITORY BOUNDARY:
@@ -253,7 +255,8 @@ CRITICAL REPOSITORY BOUNDARY:
 
 Failure handling:
 
-- Any future implementer/reviewer failure must be recorded in this SOW before continuing.
+- Any future implementation, reviewer, validation, or audit failure must be
+  recorded in this SOW before continuing.
 
 ## Execution Log
 
