@@ -8,6 +8,10 @@ Last updated: 2026-07-26
 
 ## Pending
 
+- SOW-0139 - Go Live Journalctl Boot-Selector Compatibility: open. Tracks three
+  pre-existing Go live-test failures reproduced at the unchanged base commit
+  on systemd 255; no implementation is authorized until cross-version analysis
+  and a user design decision.
 - SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
   follow-up analysis for remaining global ENTRY-array and regular/fallback DATA
   array reopens found during SOW-0135 review; no implementation is authorized.
@@ -48,6 +52,14 @@ Last updated: 2026-07-26
   decisions. Not executable until the user explicitly resumes it.
 ## Recently Closed Or Completed
 
+- SOW-0138 - Go Writer Entry-Link State Reuse: completed. The Go writer now
+  carries current-entry DATA link metadata already resolved during lookup and
+  validates/mutates a non-full compact tail through one mapped span when
+  available. The focused alternating benchmark improved 10.705% at the median
+  with byte-identical output, identical inverted indexes, passing
+  compact/regular/compression/sealing/live/portability validation, and six
+  valid `PRODUCTION GRADE` external reviews; one additional reviewer had a
+  documented local-sandbox coverage failure.
 - SOW-0135 - Rust Writer Entry-Link State Reuse: completed. The canonical Rust
   writer now carries current-entry DATA link metadata already resolved during
   lookup and opens a non-full compact tail once. The focused alternating

@@ -24,7 +24,7 @@ class WriterCoreRunnerTests(unittest.TestCase):
             },
         )
 
-    def test_non_default_workload_requires_exactly_rust(self) -> None:
+    def test_non_default_workload_supports_unique_rust_go_selections(self) -> None:
         writer_bench.validate_workload_languages(
             writer_bench.DEFAULT_WORKLOAD,
             ["systemd", "rust", "go"],
@@ -33,7 +33,15 @@ class WriterCoreRunnerTests(unittest.TestCase):
             "netflow-v5-repeating-256",
             ["rust"],
         )
-        for languages in (["rust", "go"], ["systemd"], ["rust", "rust"]):
+        writer_bench.validate_workload_languages(
+            "netflow-v5-repeating-256",
+            ["go"],
+        )
+        writer_bench.validate_workload_languages(
+            "netflow-v5-repeating-256",
+            ["rust", "go"],
+        )
+        for languages in (["systemd"], ["rust", "rust"], []):
             with self.subTest(languages=languages):
                 with self.assertRaises(ValueError):
                     writer_bench.validate_workload_languages(
@@ -61,22 +69,25 @@ class WriterCoreRunnerTests(unittest.TestCase):
         self.assertEqual(command[workload_index + 1], "netflow-v5-repeating-256")
         self.assertIn("--trusted-unique-payloads", command)
 
-    def test_non_rust_command_rejects_non_default_workload(self) -> None:
-        with self.assertRaises(ValueError):
-            writer_bench.bench_command(
-                ["go-writer-core-bench"],
-                language="go",
-                output=Path("/tmp/output.journal"),
-                rows=256,
-                journal_format="compact",
-                final_state="online",
-                max_size_bytes=128 * 1024 * 1024,
-                workload="netflow-v5-repeating-256",
-                api_mode="structured-field",
-                rust_trusted_unique_payloads=False,
-                live_publish_every_entries=0,
-                rust_mmap_strategy="windowed",
-            )
+    def test_go_command_records_selected_workload(self) -> None:
+        command = writer_bench.bench_command(
+            ["go-writer-core-bench"],
+            language="go",
+            output=Path("/tmp/output.journal"),
+            rows=256,
+            journal_format="compact",
+            final_state="online",
+            max_size_bytes=128 * 1024 * 1024,
+            workload="netflow-v5-repeating-256",
+            api_mode="structured-field",
+            rust_trusted_unique_payloads=False,
+            live_publish_every_entries=0,
+            rust_mmap_strategy="windowed",
+        )
+
+        workload_index = command.index("--workload")
+        self.assertEqual(command[workload_index + 1], "netflow-v5-repeating-256")
+        self.assertNotIn("--trusted-unique-payloads", command)
 
     def test_driver_shape_mismatch_is_a_failure(self) -> None:
         driver = {
@@ -96,7 +107,7 @@ class WriterCoreRunnerTests(unittest.TestCase):
                 driver,
                 "netflow-v5-repeating-256",
             ),
-            ["Rust driver entry_items_per_row mismatch: got 29, want 30"],
+            ["driver entry_items_per_row mismatch: got 29, want 30"],
         )
 
     def test_default_rust_driver_requires_complete_metadata(self) -> None:
@@ -111,7 +122,7 @@ class WriterCoreRunnerTests(unittest.TestCase):
                 writer_bench.DEFAULT_WORKLOAD,
             ),
             [
-                "Rust driver total_logical_data_bytes_per_row mismatch: "
+                "driver total_logical_data_bytes_per_row mismatch: "
                 "got None, want 817"
             ],
         )

@@ -5,32 +5,32 @@ import (
 	"encoding/binary"
 )
 
-func (w *Writer) addData(payload []byte) (uint64, uint64, error) {
+func (w *Writer) addData(payload []byte) (uint64, uint64, resolvedDataLinkState, error) {
 	hash := w.hash(payload)
-	if offset, ok, err := w.findData(hash, payload); err != nil || ok {
-		return offset, hash, err
+	if offset, linkState, ok, err := w.findData(hash, payload); err != nil || ok {
+		return offset, hash, linkState, err
 	}
 
 	objectPayload, compressionFlag := w.compressedDataPayload(payload)
 	offset, err := w.writeDataObject(hash, objectPayload, compressionFlag)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, resolvedDataLinkState{}, err
 	}
 
 	if err := w.appendHashItem(w.header.dataHashTableOffset, w.header.dataHashTableSize, objectTypeData, hash, offset); err != nil {
-		return 0, 0, err
+		return 0, 0, resolvedDataLinkState{}, err
 	}
 	w.header.nData++
 
 	if err := w.hmacPutObject(offset, objectTypeData); err != nil {
-		return 0, 0, err
+		return 0, 0, resolvedDataLinkState{}, err
 	}
 
 	if err := w.linkDataToField(offset, payload); err != nil {
-		return 0, 0, err
+		return 0, 0, resolvedDataLinkState{}, err
 	}
 
-	return offset, hash, nil
+	return offset, hash, resolvedDataLinkState{}, nil
 }
 
 func (w *Writer) writeDataObject(hash uint64, objectPayload []byte, compressionFlag uint8) (uint64, error) {
@@ -202,26 +202,30 @@ func (w *Writer) updateHashChainDepth(typ uint8, head uint64) error {
 	return nil
 }
 
-func (w *Writer) findData(hash uint64, payload []byte) (uint64, bool, error) {
+func (w *Writer) findData(hash uint64, payload []byte) (uint64, resolvedDataLinkState, bool, error) {
 	bucketOffset := w.header.dataHashTableOffset + (hash%(w.header.dataHashTableSize/hashItemSize))*hashItemSize
 	item, err := w.readHashItem(bucketOffset)
 	if err != nil {
-		return 0, false, err
+		return 0, resolvedDataLinkState{}, false, err
 	}
 
 	depth := uint64(0)
 	for offset := item.head; offset != 0; {
 		header, err := w.readDataHeader(offset)
 		if err != nil {
-			return 0, false, err
+			return 0, resolvedDataLinkState{}, false, err
 		}
 		if header.hash == hash {
 			stored, err := w.readDataPayload(header, offset)
 			if err != nil {
-				return 0, false, err
+				return 0, resolvedDataLinkState{}, false, err
 			}
 			if bytes.Equal(stored, payload) {
-				return offset, true, nil
+				linkState, err := w.resolvedDataLinkState(offset, header)
+				if err != nil {
+					return 0, resolvedDataLinkState{}, false, err
+				}
+				return offset, linkState, true, nil
 			}
 		}
 		if header.nextHashOffset != 0 {
@@ -232,7 +236,26 @@ func (w *Writer) findData(hash uint64, payload []byte) (uint64, bool, error) {
 		}
 		offset = header.nextHashOffset
 	}
-	return 0, false, nil
+	return 0, resolvedDataLinkState{}, false, nil
+}
+
+func (w *Writer) resolvedDataLinkState(dataOffset uint64, header dataHeader) (resolvedDataLinkState, error) {
+	state := resolvedDataLinkState{
+		nEntries:         header.nEntries,
+		entryArrayOffset: header.entryArrayOffset,
+	}
+	if !w.compact || header.nEntries < 2 {
+		return state, nil
+	}
+	tailOffset, tailEntries, ok, err := w.readCompactDataTail(dataOffset)
+	if err != nil {
+		return resolvedDataLinkState{}, err
+	}
+	if ok {
+		state.compactTailOffset = tailOffset
+		state.compactTailEntries = tailEntries
+	}
+	return state, nil
 }
 
 func (w *Writer) findField(hash uint64, payload []byte) (uint64, bool, error) {

@@ -161,14 +161,22 @@ func (w *Writer) readOffsetArrayHeader(offset uint64) (offsetArrayHeader, uint64
 	if err != nil {
 		return offsetArrayHeader{}, 0, err
 	}
+	capacity, err := w.offsetArrayCapacity(header)
+	if err != nil {
+		return offsetArrayHeader{}, 0, err
+	}
+	return header, capacity, nil
+}
+
+func (w *Writer) offsetArrayCapacity(header offsetArrayHeader) (uint64, error) {
 	if header.object.typ != objectTypeEntryArray || header.object.size < offsetArrayObjectHeaderSize {
-		return offsetArrayHeader{}, 0, errInvalidJournal
+		return 0, errInvalidJournal
 	}
 	itemSize := w.offsetArrayItemSize()
 	if (header.object.size-offsetArrayObjectHeaderSize)%itemSize != 0 {
-		return offsetArrayHeader{}, 0, errInvalidJournal
+		return 0, errInvalidJournal
 	}
-	return header, (header.object.size - offsetArrayObjectHeaderSize) / itemSize, nil
+	return (header.object.size - offsetArrayObjectHeaderSize) / itemSize, nil
 }
 
 func (w *Writer) writeArrayItem(arrayOffset, index, entryOffset uint64) error {
@@ -182,18 +190,14 @@ func (w *Writer) writeArrayItem(arrayOffset, index, entryOffset uint64) error {
 	return w.writeUint64At(itemOffset, entryOffset)
 }
 
-func (w *Writer) linkDataToEntry(dataOffset, entryOffset uint64) error {
-	header, err := w.readDataHeader(dataOffset)
-	if err != nil {
-		return err
-	}
-	switch header.nEntries {
+func (w *Writer) linkDataToEntry(dataOffset, entryOffset uint64, state resolvedDataLinkState) error {
+	switch state.nEntries {
 	case 0:
 		return w.linkFirstEntryToData(dataOffset, entryOffset)
 	case 1:
 		return w.linkSecondEntryToData(dataOffset, entryOffset)
 	default:
-		return w.linkLaterEntryToData(dataOffset, entryOffset, header)
+		return w.linkLaterEntryToData(dataOffset, entryOffset, state)
 	}
 }
 
@@ -223,12 +227,12 @@ func (w *Writer) linkSecondEntryToData(dataOffset, entryOffset uint64) error {
 	return w.writeUint64At(dataOffset+56, 2)
 }
 
-func (w *Writer) linkLaterEntryToData(dataOffset, entryOffset uint64, header dataHeader) error {
-	if header.entryArrayOffset == 0 {
+func (w *Writer) linkLaterEntryToData(dataOffset, entryOffset uint64, state resolvedDataLinkState) error {
+	if state.entryArrayOffset == 0 {
 		return errInvalidJournal
 	}
-	currentCount := header.nEntries - 1
-	tailOffset, tailEntries, err := w.appendToDataEntryArrayTail(dataOffset, header.entryArrayOffset, currentCount, entryOffset)
+	currentCount := state.nEntries - 1
+	tailOffset, tailEntries, err := w.appendToDataEntryArrayTail(state, currentCount, entryOffset)
 	if err != nil {
 		return err
 	}
@@ -237,28 +241,40 @@ func (w *Writer) linkLaterEntryToData(dataOffset, entryOffset uint64, header dat
 			return err
 		}
 	}
-	return w.writeUint64At(dataOffset+56, header.nEntries+1)
+	return w.writeUint64At(dataOffset+56, state.nEntries+1)
 }
 
-func (w *Writer) appendToDataEntryArrayTail(dataOffset, entryArrayOffset, currentCount, entryOffset uint64) (uint64, uint64, error) {
-	tailOffset, tailEntries, ok, err := w.appendToCompactDataEntryArrayTail(dataOffset, currentCount, entryOffset)
+func (w *Writer) appendToDataEntryArrayTail(state resolvedDataLinkState, currentCount, entryOffset uint64) (uint64, uint64, error) {
+	tailOffset, tailEntries, ok, err := w.appendToCompactDataEntryArrayTail(state, currentCount, entryOffset)
 	if err != nil || ok {
 		return tailOffset, tailEntries, err
 	}
-	return w.appendToDataEntryArray(entryArrayOffset, currentCount, entryOffset)
+	return w.appendToDataEntryArray(state.entryArrayOffset, currentCount, entryOffset)
 }
 
-func (w *Writer) appendToCompactDataEntryArrayTail(dataOffset, currentCount, entryOffset uint64) (uint64, uint64, bool, error) {
+func (w *Writer) appendToCompactDataEntryArrayTail(state resolvedDataLinkState, currentCount, entryOffset uint64) (uint64, uint64, bool, error) {
 	if !w.compact {
 		return 0, 0, false, nil
 	}
-	tailOffset, tailEntries, ok, err := w.readCompactDataTail(dataOffset)
+	tailOffset := state.compactTailOffset
+	tailEntries := state.compactTailEntries
+	if tailOffset == 0 || tailEntries == 0 || tailEntries > currentCount {
+		return 0, 0, false, nil
+	}
+
+	status, capacity, err := w.appendToMappedCompactDataTail(tailOffset, tailEntries, entryOffset)
 	if err != nil {
 		return 0, 0, false, err
 	}
-	if !ok || tailEntries == 0 || tailEntries > currentCount {
+	switch status {
+	case mappedCompactTailInvalid:
 		return 0, 0, false, nil
+	case mappedCompactTailAppended:
+		return tailOffset, tailEntries + 1, true, nil
+	case mappedCompactTailFull:
+		return w.appendNewCompactDataTail(tailOffset, currentCount, capacity, entryOffset)
 	}
+
 	header, cap, err := w.readOffsetArrayHeader(tailOffset)
 	if err != nil || header.nextArrayOffset != 0 || tailEntries > cap {
 		return 0, 0, false, nil
@@ -267,6 +283,49 @@ func (w *Writer) appendToCompactDataEntryArrayTail(dataOffset, currentCount, ent
 		return w.appendToExistingCompactDataTail(tailOffset, tailEntries, entryOffset)
 	}
 	return w.appendNewCompactDataTail(tailOffset, currentCount, cap, entryOffset)
+}
+
+type mappedCompactTailStatus uint8
+
+const (
+	mappedCompactTailUnavailable mappedCompactTailStatus = iota
+	mappedCompactTailInvalid
+	mappedCompactTailAppended
+	mappedCompactTailFull
+)
+
+func (w *Writer) appendToMappedCompactDataTail(
+	tailOffset, tailEntries, entryOffset uint64,
+) (mappedCompactTailStatus, uint64, error) {
+	if w.arena == nil {
+		return mappedCompactTailUnavailable, 0, nil
+	}
+	if entryOffset > journalCompactSizeMax {
+		return mappedCompactTailUnavailable, 0, fmt.Errorf("%w: compact entry offset exceeds 32-bit range", errInvalidJournal)
+	}
+	const itemSize = uint64(compactOffsetArrayItemSize)
+	if tailEntries == ^uint64(0) || tailEntries+1 > (^uint64(0)-offsetArrayObjectHeaderSize)/itemSize {
+		return mappedCompactTailInvalid, 0, nil
+	}
+	spanSize := uint64(offsetArrayObjectHeaderSize) + (tailEntries+1)*itemSize
+	span, direct, err := w.arena.directBytesAt(tailOffset, spanSize)
+	if err != nil || !direct {
+		return mappedCompactTailUnavailable, 0, nil
+	}
+	header, err := parseOffsetArrayHeader(span[:offsetArrayObjectHeaderSize])
+	if err != nil {
+		return mappedCompactTailInvalid, 0, nil
+	}
+	capacity, err := w.offsetArrayCapacity(header)
+	if err != nil || header.nextArrayOffset != 0 || tailEntries > capacity {
+		return mappedCompactTailInvalid, 0, nil
+	}
+	if tailEntries == capacity {
+		return mappedCompactTailFull, capacity, nil
+	}
+	itemOffset := uint64(offsetArrayObjectHeaderSize) + tailEntries*itemSize
+	binary.LittleEndian.PutUint32(span[itemOffset:itemOffset+itemSize], uint32(entryOffset))
+	return mappedCompactTailAppended, capacity, nil
 }
 
 func (w *Writer) appendToExistingCompactDataTail(tailOffset, tailEntries, entryOffset uint64) (uint64, uint64, bool, error) {

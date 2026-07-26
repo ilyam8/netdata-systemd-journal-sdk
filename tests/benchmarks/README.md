@@ -75,7 +75,7 @@ and `N > 1` publishes after every `N` appended entries. Rust benchmark results
 also record `mmap_strategy` when the internal writer mapping switch is used.
 
 The default writer-core workload remains `mixed-cardinality-32-fields`.
-`--workload netflow-v5-repeating-256` is a focused Rust-only diagnostic for a
+`--workload netflow-v5-repeating-256` is a focused Rust/Go diagnostic for a
 synthetic NetFlow v5 row shape:
 
 - 29 structured application fields and 450 application `KEY=value` bytes;
@@ -85,16 +85,18 @@ synthetic NetFlow v5 row shape:
 - source-address cardinality 100, destination-address cardinality 3, and
   input-interface cardinality 256.
 
-This workload supports only the direct Rust surface. The shared runner rejects
-it unless `--languages rust` is selected exactly, and reports record the
-workload and row-shape metadata. Treat it as a causal writer-path diagnostic,
-not as a universal SDK or NetFlow capacity claim.
+This workload supports the direct Rust and Go surfaces, individually or
+together. The shared runner rejects systemd and duplicate language selections,
+and reports record the workload and row-shape metadata. Rust can opt into its
+trusted-unique payload mode; Go preserves its standard sorting and duplicate
+elimination. Treat the workload as a causal writer-path diagnostic, not as a
+universal SDK or NetFlow capacity claim.
 
 Focused repeated-DATA measurement:
 
 ```bash
 python3 tests/benchmarks/run_writer_core_benchmarks.py \
-  --languages rust \
+  --languages rust go \
   --workload netflow-v5-repeating-256 \
   --rows 100000 \
   --warmups 2 \

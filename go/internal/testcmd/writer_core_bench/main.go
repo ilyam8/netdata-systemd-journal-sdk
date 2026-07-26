@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -17,9 +18,13 @@ const (
 	baseRealtimeUsec  = uint64(1_700_000_000_000_000)
 	baseMonotonicUsec = uint64(50_000_000)
 	seqnumIDHex       = "22222222222222222222222222222222"
-	fieldsPerRow      = 32
 	defaultMaxSize    = 128 * 1024 * 1024
 	fieldHashBuckets  = 1023
+
+	mixedCardinalityWorkload = "mixed-cardinality-32-fields"
+	netflowV5Workload        = "netflow-v5-repeating-256"
+	netflowBootFieldName     = "_BOOT_ID"
+	netflowBootFieldValue    = "0123456789abcdef0123456789abcdef"
 )
 
 var (
@@ -32,6 +37,11 @@ var (
 type benchResult struct {
 	Records                 int      `json:"records"`
 	FieldsPerRow            int      `json:"fields_per_row"`
+	Workload                string   `json:"workload"`
+	ApplicationFieldsPerRow int      `json:"application_fields_per_row"`
+	EntryItemsPerRow        int      `json:"entry_items_per_row"`
+	ApplicationLogicalBytes int      `json:"application_logical_bytes_per_row"`
+	TotalLogicalDataBytes   int      `json:"total_logical_data_bytes_per_row"`
 	Surface                 string   `json:"surface"`
 	AppendSeconds           float64  `json:"append_seconds"`
 	AppendRowsPerSecond     float64  `json:"append_rows_per_second"`
@@ -66,9 +76,19 @@ type writerConfig struct {
 	rotationMaxSize         uint64
 	livePublishEveryEntries uint64
 	apiMode                 string
+	workload                string
+	cpuProfile              string
 	rows                    int
 	compact                 bool
 	dataHashBuckets         int
+}
+
+type workloadMetadata struct {
+	name                          string
+	applicationFieldsPerRow       int
+	entryItemsPerRow              int
+	applicationLogicalBytesPerRow int
+	totalLogicalDataBytesPerRow   int
 }
 
 type benchRow struct {
@@ -122,7 +142,39 @@ func livePublicationName(everyEntries uint64) string {
 	}
 }
 
-func makeRows(rows int) []benchRow {
+func metadataForWorkload(workload string) (workloadMetadata, bool) {
+	switch workload {
+	case mixedCardinalityWorkload:
+		return workloadMetadata{
+			name:                          mixedCardinalityWorkload,
+			applicationFieldsPerRow:       32,
+			entryItemsPerRow:              32,
+			applicationLogicalBytesPerRow: 817,
+			totalLogicalDataBytesPerRow:   817,
+		}, true
+	case netflowV5Workload:
+		return workloadMetadata{
+			name:                          netflowV5Workload,
+			applicationFieldsPerRow:       29,
+			entryItemsPerRow:              30,
+			applicationLogicalBytesPerRow: 450,
+			totalLogicalDataBytesPerRow:   491,
+		}, true
+	default:
+		return workloadMetadata{}, false
+	}
+}
+
+func makeRows(workload string, rows int) []benchRow {
+	switch workload {
+	case netflowV5Workload:
+		return makeNetflowV5Rows(rows)
+	default:
+		return makeMixedCardinalityRows(rows)
+	}
+}
+
+func makeMixedCardinalityRows(rows int) []benchRow {
 	fixed := []journal.Field{
 		{Name: "TEST_ID", Value: bytesOf("deterministic-ingestion-performance")},
 		{Name: "PERF_PROFILE", Value: bytesOf("mixed-cardinality-32-fields")},
@@ -146,7 +198,7 @@ func makeRows(rows int) []benchRow {
 
 	all := make([]benchRow, rows)
 	for row := range rows {
-		fields := make([]journal.Field, 0, fieldsPerRow)
+		fields := make([]journal.Field, 0, 32)
 		fields = append(fields, fixed...)
 		for offset := 0; offset < 12; offset++ {
 			fields = append(fields, journal.Field{
@@ -166,6 +218,64 @@ func makeRows(rows int) []benchRow {
 				Value: bytesOf(fmt.Sprintf("high-%02d-%06d", offset, row)),
 			})
 		}
+		payloads := make([][]byte, 0, len(fields))
+		for _, field := range fields {
+			payloads = append(payloads, makePayload(field.Name, field.Value))
+		}
+		all[row] = benchRow{Fields: fields, Payloads: payloads}
+	}
+	return all
+}
+
+func makeNetflowV5Rows(rows int) []benchRow {
+	fixed := []journal.Field{
+		{Name: "FLOW_VERSION", Value: bytesOf("v5")},
+		{Name: "EXPORTER_IP", Value: bytesOf("127.0.0.1")},
+		{Name: "EXPORTER_PORT", Value: bytesOf("12345")},
+		{Name: "EXPORTER_NAME", Value: bytesOf("127_0_0_1")},
+		{Name: "ETYPE", Value: bytesOf("2048")},
+		{Name: "PROTOCOL", Value: bytesOf("6")},
+		{Name: "BYTES", Value: bytesOf("64")},
+		{Name: "PACKETS", Value: bytesOf("1")},
+		{Name: "FLOWS", Value: bytesOf("1")},
+	}
+	fixedAfterAddresses := []journal.Field{
+		{Name: "SRC_PREFIX", Value: bytesOf("192.0.2.0/24")},
+		{Name: "DST_PREFIX", Value: bytesOf("198.51.100.0/24")},
+		{Name: "SRC_MASK", Value: bytesOf("24")},
+		{Name: "DST_MASK", Value: bytesOf("24")},
+		{Name: "SRC_AS", Value: bytesOf("64512")},
+		{Name: "DST_AS", Value: bytesOf("64513")},
+	}
+	fixedAfterInput := []journal.Field{
+		{Name: "OUT_IF", Value: bytesOf("60000")},
+		{Name: "NEXT_HOP", Value: bytesOf("192.0.2.1")},
+		{Name: "SRC_PORT", Value: bytesOf("10000")},
+		{Name: "DST_PORT", Value: bytesOf("20000")},
+		{Name: "FLOW_START_USEC", Value: bytesOf("1699999950000000")},
+		{Name: "FLOW_END_USEC", Value: bytesOf("1699999950001000")},
+		{Name: "IPTOS", Value: bytesOf("0")},
+		{Name: "TCP_FLAGS", Value: bytesOf("18")},
+		{Name: "RAW_BYTES", Value: bytesOf("64")},
+		{Name: "RAW_PACKETS", Value: bytesOf("1")},
+		{Name: "SAMPLING_RATE", Value: bytesOf("1")},
+	}
+	bootField := journal.StringField(netflowBootFieldName, netflowBootFieldValue)
+
+	all := make([]benchRow, rows)
+	for row := range rows {
+		identity := row % 256
+		fields := make([]journal.Field, 0, 30)
+		fields = append(fields, bootField)
+		fields = append(fields, fixed...)
+		fields = append(fields,
+			journal.StringField("SRC_ADDR", fmt.Sprintf("192.0.2.%d", 100+identity%100)),
+			journal.StringField("DST_ADDR", fmt.Sprintf("198.51.100.%d", 100+identity/100)),
+		)
+		fields = append(fields, fixedAfterAddresses...)
+		fields = append(fields, journal.StringField("IN_IF", fmt.Sprintf("%d", 10_000+identity)))
+		fields = append(fields, fixedAfterInput...)
+
 		payloads := make([][]byte, 0, len(fields))
 		for _, field := range fields {
 			payloads = append(payloads, makePayload(field.Name, field.Value))
@@ -303,6 +413,8 @@ func parseWriterConfig() writerConfig {
 	var format string
 	var finalState string
 	var surface string
+	var workload string
+	var cpuProfile string
 	var maxSize uint64
 	var rotationMaxSize uint64
 	var livePublishEveryEntries uint64
@@ -312,6 +424,8 @@ func parseWriterConfig() writerConfig {
 	flag.StringVar(&format, "format", "compact", "journal format: compact or regular")
 	flag.StringVar(&finalState, "final-state", "online", "final state: online, offline, or archived")
 	flag.StringVar(&surface, "surface", "direct", "writer surface: direct or directory")
+	flag.StringVar(&workload, "workload", mixedCardinalityWorkload, "deterministic row workload")
+	flag.StringVar(&cpuProfile, "cpuprofile", "", "write an append-loop CPU profile")
 	flag.Uint64Var(&maxSize, "max-size-bytes", defaultMaxSize, "systemd max-size value used for hash table sizing")
 	flag.Uint64Var(&rotationMaxSize, "rotation-max-size-bytes", defaultMaxSize, "directory active-file rotation size")
 	flag.Uint64Var(&livePublishEveryEntries, "live-publish-every-entries", 1, "explicit live-reader publication cadence; 0 disables explicit publication")
@@ -329,6 +443,8 @@ func parseWriterConfig() writerConfig {
 		rotationMaxSize:         rotationMaxSize,
 		livePublishEveryEntries: livePublishEveryEntries,
 		apiMode:                 apiMode,
+		workload:                workload,
+		cpuProfile:              cpuProfile,
 		rows:                    rows,
 		compact:                 format == "compact",
 		dataHashBuckets:         dataHashBuckets,
@@ -343,7 +459,7 @@ func main() {
 	}
 
 	precomputeStart := time.Now()
-	data := makeRows(cfg.rows)
+	data := makeRows(cfg.workload, cfg.rows)
 	result.PrecomputeSeconds = time.Since(precomputeStart).Seconds()
 
 	if cfg.surface == "directory" {
@@ -357,9 +473,15 @@ func main() {
 }
 
 func newBenchResult(cfg writerConfig) benchResult {
+	metadata, _ := metadataForWorkload(cfg.workload)
 	return benchResult{
 		Records:                 0,
-		FieldsPerRow:            fieldsPerRow,
+		FieldsPerRow:            metadata.applicationFieldsPerRow,
+		Workload:                metadata.name,
+		ApplicationFieldsPerRow: metadata.applicationFieldsPerRow,
+		EntryItemsPerRow:        metadata.entryItemsPerRow,
+		ApplicationLogicalBytes: metadata.applicationLogicalBytesPerRow,
+		TotalLogicalDataBytes:   metadata.totalLogicalDataBytesPerRow,
 		Surface:                 cfg.surface,
 		Format:                  cfg.format,
 		Compression:             "none",
@@ -394,7 +516,40 @@ func validateWriterConfig(cfg writerConfig, result *benchResult) bool {
 		result.Errors = append(result.Errors, "invalid --surface")
 		return false
 	}
+	if _, ok := metadataForWorkload(cfg.workload); !ok {
+		result.Errors = append(result.Errors, "invalid --workload")
+		return false
+	}
+	if cfg.surface == "directory" && cfg.workload != mixedCardinalityWorkload {
+		result.Errors = append(result.Errors, "non-default workloads require --surface direct")
+		return false
+	}
+	if cfg.cpuProfile != "" && cfg.surface != "direct" {
+		result.Errors = append(result.Errors, "--cpuprofile requires --surface direct")
+		return false
+	}
 	return true
+}
+
+func startCPUProfile(path string) (func() error, error) {
+	if path == "" {
+		return func() error { return nil }, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := pprof.StartCPUProfile(file); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return func() error {
+		pprof.StopCPUProfile()
+		return file.Close()
+	}, nil
 }
 
 func runDirect(result *benchResult, cfg writerConfig, data []benchRow) {
@@ -421,6 +576,12 @@ func runDirect(result *benchResult, cfg writerConfig, data []benchRow) {
 		return
 	}
 
+	stopCPUProfile, err := startCPUProfile(cfg.cpuProfile)
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		_ = w.Close()
+		return
+	}
 	appendStart := time.Now()
 	for index, row := range data {
 		opts := journal.EntryOptions{
@@ -445,6 +606,9 @@ func runDirect(result *benchResult, cfg writerConfig, data []benchRow) {
 	result.AppendSeconds = time.Since(appendStart).Seconds()
 	if result.AppendSeconds > 0 {
 		result.AppendRowsPerSecond = float64(result.Records) / result.AppendSeconds
+	}
+	if err := stopCPUProfile(); err != nil {
+		result.Errors = append(result.Errors, err.Error())
 	}
 
 	closeStart := time.Now()

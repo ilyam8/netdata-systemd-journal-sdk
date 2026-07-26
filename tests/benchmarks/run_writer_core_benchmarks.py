@@ -150,8 +150,8 @@ def bench_command(
     rust_mmap_strategy: str,
 ) -> list[str]:
     workload_metadata(workload)
-    if workload != DEFAULT_WORKLOAD and language != "rust":
-        raise ValueError(f"workload {workload!r} is supported only by the Rust driver")
+    if workload != DEFAULT_WORKLOAD and language not in ("rust", "go"):
+        raise ValueError(f"workload {workload!r} is supported only by the Rust and Go drivers")
     cmd = [
         *base,
         "--rows",
@@ -168,8 +168,9 @@ def bench_command(
     if language != "systemd":
         cmd.extend(["--live-publish-every-entries", str(live_publish_every_entries)])
         cmd.extend(["--api-mode", api_mode])
-    if language == "rust":
+    if language in ("rust", "go"):
         cmd.extend(["--workload", workload])
+    if language == "rust":
         cmd.extend(["--mmap-strategy", rust_mmap_strategy])
         if rust_trusted_unique_payloads:
             cmd.append("--trusted-unique-payloads")
@@ -190,16 +191,23 @@ def driver_workload_errors(driver: dict[str, Any], workload: str) -> list[str]:
         actual = driver.get(field)
         if actual != expected_value:
             errors.append(
-                f"Rust driver {field} mismatch: got {actual!r}, want {expected_value!r}"
+                f"driver {field} mismatch: got {actual!r}, want {expected_value!r}"
             )
     return errors
 
 
 def validate_workload_languages(workload: str, languages: list[str]) -> None:
     workload_metadata(workload)
-    if workload != DEFAULT_WORKLOAD and languages != ["rust"]:
+    if workload == DEFAULT_WORKLOAD:
+        return
+    supported = {"rust", "go"}
+    if (
+        not languages
+        or len(languages) != len(set(languages))
+        or any(language not in supported for language in languages)
+    ):
         raise ValueError(
-            f"workload {workload!r} requires exactly '--languages rust'; "
+            f"workload {workload!r} supports unique Rust/Go language selections; "
             f"got {languages!r}"
         )
 
@@ -490,7 +498,7 @@ def one_measurement(
     file_size = journal_path.stat().st_size if journal_path.exists() else 0
     records = int(driver.get("records", 0) or 0)
     errors = list(driver.get("errors", []) or [])
-    if language == "rust":
+    if language in ("rust", "go"):
         errors.extend(driver_workload_errors(driver, args.workload))
     structure = quick_header_check(journal_path, compact=args.format == "compact") if journal_path.exists() else {
         "status": "FAIL",
@@ -776,8 +784,8 @@ def parse_args() -> argparse.Namespace:
         choices=tuple(WORKLOADS),
         default=DEFAULT_WORKLOAD,
         help=(
-            "Deterministic row corpus. Non-default workloads are Rust-only "
-            "diagnostics and require exactly '--languages rust'."
+            "Deterministic row corpus. Non-default workloads are Rust/Go "
+            "diagnostics and exclude systemd."
         ),
     )
     parser.add_argument("--repetitions", type=int, default=3)

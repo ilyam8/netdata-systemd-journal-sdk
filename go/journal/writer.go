@@ -492,11 +492,11 @@ func (w *Writer) collectEntryItems(items []entryItem, count int, payloadAt func(
 	xorHash := uint64(0)
 	for i := 0; i < count; i++ {
 		payload := payloadAt(i)
-		offset, hash, err := w.addData(payload)
+		offset, hash, linkState, err := w.addData(payload)
 		if err != nil {
 			return nil, 0, err
 		}
-		items = append(items, entryItem{offset: offset, hash: hash})
+		items = append(items, entryItem{offset: offset, hash: hash, linkState: linkState})
 		xorHash ^= jenkinsHash64(payload)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].offset < items[j].offset })
@@ -552,7 +552,7 @@ func (w *Writer) publishEntryObject(entryOffset uint64, items []entryItem, entry
 		return err
 	}
 	for _, item := range items {
-		if err := w.linkDataToEntry(item.offset, entryOffset); err != nil {
+		if err := w.linkDataToEntry(item.offset, entryOffset, item.linkState); err != nil {
 			return err
 		}
 	}
@@ -640,8 +640,16 @@ func (w *Writer) archiveTo(path string, syncOnArchive bool) error {
 }
 
 type entryItem struct {
-	offset uint64
-	hash   uint64
+	offset    uint64
+	hash      uint64
+	linkState resolvedDataLinkState
+}
+
+type resolvedDataLinkState struct {
+	nEntries           uint64
+	entryArrayOffset   uint64
+	compactTailOffset  uint64
+	compactTailEntries uint64
 }
 
 const (
