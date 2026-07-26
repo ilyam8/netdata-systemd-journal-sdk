@@ -1,3 +1,4 @@
+use super::file_payload::ResolvedDataLinkState;
 use super::mmap::MmapMut;
 use crate::error::{JournalError, Result};
 use crate::file::{
@@ -26,6 +27,7 @@ pub(super) fn round_up_to_file_size_increment(value: u64) -> Result<u64> {
 pub(super) struct EntryItem {
     pub(super) offset: NonZeroU64,
     pub(super) hash: u64,
+    pub(super) link_state: Option<ResolvedDataLinkState>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -604,6 +606,12 @@ impl JournalWriter {
         }
         if !trusted_unique_payloads {
             self.entry_items.dedup_by(|a, b| a.offset == b.offset);
+        } else {
+            for index in 1..self.entry_items.len() {
+                if self.entry_items[index - 1].offset == self.entry_items[index].offset {
+                    self.entry_items[index].link_state = None;
+                }
+            }
         }
         Ok(())
     }
@@ -751,14 +759,20 @@ impl JournalWriter {
         let payload = field.payload_parts();
         let field_name = field.field_name().ok_or(JournalError::InvalidField)?;
         let hash = journal_file.hash_parts(payload);
-        if let Some(data_offset) = journal_file.find_data_offset_parts(hash, payload)? {
-            return Ok(Self::entry_item(data_offset, hash));
+        if let Some((data_offset, link_state)) =
+            journal_file.find_data_with_link_state_parts(hash, payload)?
+        {
+            return Ok(Self::entry_item(data_offset, hash, link_state));
         }
         self.add_new_data(journal_file, payload, field_name, hash)
     }
 
-    fn entry_item(offset: NonZeroU64, hash: u64) -> EntryItem {
-        EntryItem { offset, hash }
+    fn entry_item(offset: NonZeroU64, hash: u64, link_state: ResolvedDataLinkState) -> EntryItem {
+        EntryItem {
+            offset,
+            hash,
+            link_state: Some(link_state),
+        }
     }
 
     fn add_new_data<'a>(
@@ -771,7 +785,11 @@ impl JournalWriter {
         let data_offset = self.write_new_data_object(journal_file, payload, hash)?;
         self.publish_new_data_object(journal_file, data_offset, hash)?;
         self.link_data_to_field(journal_file, data_offset, field_name)?;
-        Ok(Self::entry_item(data_offset, hash))
+        Ok(Self::entry_item(
+            data_offset,
+            hash,
+            ResolvedDataLinkState::empty(),
+        ))
     }
 
     fn write_new_data_object<'a>(

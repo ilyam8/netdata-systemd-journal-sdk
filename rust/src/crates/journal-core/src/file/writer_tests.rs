@@ -1,6 +1,6 @@
 use super::{
-    FIELD_CACHE_MAX_ENTRIES, FIELD_CACHE_MAX_PAYLOAD_LEN, FieldCache, PayloadParts,
-    zstd_frame_with_content_size,
+    EntryItem, FIELD_CACHE_MAX_ENTRIES, FIELD_CACHE_MAX_PAYLOAD_LEN, FieldCache, PayloadParts,
+    ResolvedDataLinkState, zstd_frame_with_content_size,
 };
 use std::io::{Cursor, Read};
 use std::num::NonZeroU64;
@@ -47,6 +47,60 @@ fn field_cache_stays_bounded_after_capacity_is_exceeded() {
     );
     assert!(cache.get(b"FIELD_0").is_none());
     assert!(cache.len() <= FIELD_CACHE_MAX_ENTRIES);
+}
+
+#[test]
+fn trusted_unique_duplicate_offsets_use_authoritative_fallback_state() {
+    let offset = NonZeroU64::new(64).unwrap();
+    let link_state = ResolvedDataLinkState::empty();
+    let mut writer = zstd_writer(DEFAULT_COMPRESS_THRESHOLD);
+    writer.entry_items = vec![
+        EntryItem {
+            offset,
+            hash: 1,
+            link_state: Some(link_state),
+        },
+        EntryItem {
+            offset,
+            hash: 1,
+            link_state: Some(link_state),
+        },
+        EntryItem {
+            offset,
+            hash: 1,
+            link_state: Some(link_state),
+        },
+    ];
+
+    writer.finish_entry_items(true).unwrap();
+
+    assert_eq!(writer.entry_items[0].link_state, Some(link_state));
+    assert_eq!(writer.entry_items[1].link_state, None);
+    assert_eq!(writer.entry_items[2].link_state, None);
+}
+
+#[test]
+fn default_duplicate_elimination_keeps_one_resolved_state() {
+    let offset = NonZeroU64::new(64).unwrap();
+    let link_state = ResolvedDataLinkState::empty();
+    let mut writer = zstd_writer(DEFAULT_COMPRESS_THRESHOLD);
+    writer.entry_items = vec![
+        EntryItem {
+            offset,
+            hash: 1,
+            link_state: Some(link_state),
+        },
+        EntryItem {
+            offset,
+            hash: 1,
+            link_state: Some(link_state),
+        },
+    ];
+
+    writer.finish_entry_items(false).unwrap();
+
+    assert_eq!(writer.entry_items.len(), 1);
+    assert_eq!(writer.entry_items[0].link_state, Some(link_state));
 }
 
 #[test]
@@ -111,8 +165,9 @@ use super::{
 };
 use crate::error::JournalError;
 use crate::file::{
-    Compression, DEFAULT_COMPRESS_THRESHOLD, HeaderCompatibleFlags, HeaderIncompatibleFlags,
-    JournalFileOptions, MIN_COMPRESS_THRESHOLD, MmapMut, ObjectFlags, normalize_compress_threshold,
+    Compression, DEFAULT_COMPRESS_THRESHOLD, DataPayloadType, HeaderCompatibleFlags,
+    HeaderIncompatibleFlags, JournalFileOptions, MIN_COMPRESS_THRESHOLD, MmapMut, ObjectFlags,
+    normalize_compress_threshold,
 };
 use crate::seal::SealOptions;
 #[cfg(unix)]
@@ -391,6 +446,230 @@ fn write_entry_fields_test_journal(
         entry_item_count,
         payloads,
     )
+}
+
+#[test]
+fn new_data_entry_item_starts_with_empty_link_state() {
+    let dir = TempDir::new().expect("create temp dir");
+    let path = dir.path().join("new-data-link-state.journal");
+    let repo_file =
+        crate::repository::File::from_path(&path).expect("test journal path should parse");
+    let mut journal_file = JournalFile::create(
+        &repo_file,
+        JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3)),
+    )
+    .expect("create link-state journal");
+    let mut writer =
+        JournalWriter::new(&mut journal_file, 1, test_uuid(4)).expect("create link-state writer");
+    let payload = b"MESSAGE=new-data-link-state";
+
+    let item = writer
+        .add_data(&mut journal_file, EntryField::raw(payload))
+        .expect("add new DATA object");
+
+    assert_eq!(item.link_state, Some(ResolvedDataLinkState::empty()));
+    let (_, resolved_state) = journal_file
+        .find_data_with_link_state_parts(item.hash, PayloadParts::raw(payload))
+        .expect("resolve new DATA object")
+        .expect("find new DATA object");
+    assert_eq!(resolved_state, ResolvedDataLinkState::empty());
+}
+
+#[test]
+fn resolved_data_link_state_tracks_regular_and_compact_tail_growth() {
+    let dir = TempDir::new().expect("create temp dir");
+    let payload = b"MESSAGE=reused-link-state".as_slice();
+
+    for compact in [false, true] {
+        let path = dir.path().join(if compact {
+            "compact-state.journal"
+        } else {
+            "regular-state.journal"
+        });
+        let repo_file =
+            crate::repository::File::from_path(&path).expect("test journal path should parse");
+        let mut journal_file = JournalFile::create(
+            &repo_file,
+            JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3)).with_compact(compact),
+        )
+        .expect("create link-state journal");
+        let mut writer =
+            JournalWriter::new(&mut journal_file, 1, test_uuid(4)).expect("create writer");
+        let mut head_array_offset = None;
+
+        for entry_count in 1..=6u64 {
+            writer
+                .add_entry(
+                    &mut journal_file,
+                    &[payload],
+                    1_700_000_060_000_000 + entry_count,
+                    100 + entry_count,
+                )
+                .expect("write repeated DATA entry");
+
+            let hash = journal_file.hash(payload);
+            let (_, link_state) = journal_file
+                .find_data_with_link_state_parts(hash, PayloadParts::raw(payload))
+                .expect("resolve DATA state")
+                .expect("find repeated DATA");
+            assert_eq!(link_state.n_entries.map(NonZeroU64::get), Some(entry_count));
+
+            if entry_count == 1 {
+                assert_eq!(link_state.entry_array_offset, None);
+                assert_eq!(link_state.compact_tail, None);
+                continue;
+            }
+
+            let array_offset = link_state
+                .entry_array_offset
+                .expect("DATA entry array after promotion");
+            assert_eq!(*head_array_offset.get_or_insert(array_offset), array_offset);
+            if compact {
+                let (tail_offset, tail_entries) =
+                    link_state.compact_tail.expect("compact DATA tail state");
+                if entry_count <= 5 {
+                    assert_eq!(tail_offset, array_offset);
+                    assert_eq!(tail_entries, entry_count - 1);
+                } else {
+                    assert_ne!(tail_offset, array_offset);
+                    assert_eq!(tail_entries, 1);
+                }
+            } else {
+                assert_eq!(link_state.compact_tail, None);
+            }
+        }
+
+        journal_file.sync().expect("sync link-state journal");
+        if journalctl_available() {
+            let output = Command::new("journalctl")
+                .arg("--verify")
+                .arg("--file")
+                .arg(&path)
+                .output()
+                .expect("run journalctl verify");
+            assert!(
+                output.status.success(),
+                "journalctl verify failed for link-state journal: stdout={} stderr={}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+}
+
+#[test]
+fn trusted_unique_duplicate_fallback_reads_updated_data_state() {
+    let dir = TempDir::new().expect("create temp dir");
+    let payload = b"MESSAGE=trusted-duplicate".as_slice();
+
+    for compact in [false, true] {
+        let path = dir.path().join(if compact {
+            "compact-duplicate.journal"
+        } else {
+            "regular-duplicate.journal"
+        });
+        let repo_file =
+            crate::repository::File::from_path(&path).expect("test journal path should parse");
+        let mut journal_file = JournalFile::create(
+            &repo_file,
+            JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3)).with_compact(compact),
+        )
+        .expect("create duplicate-state journal");
+        let mut writer =
+            JournalWriter::new(&mut journal_file, 1, test_uuid(4)).expect("create writer");
+
+        for index in 0..2u64 {
+            writer
+                .add_entry_fields_with_options(
+                    &mut journal_file,
+                    [EntryField::raw(payload), EntryField::raw(payload)],
+                    1_700_000_060_000_000 + index,
+                    100 + index,
+                    EntryWriteOptions::default().trusted_unique_payloads(true),
+                )
+                .expect("write trusted duplicate entry");
+        }
+
+        let hash = journal_file.hash(payload);
+        let (_, link_state) = journal_file
+            .find_data_with_link_state_parts(hash, PayloadParts::raw(payload))
+            .expect("resolve duplicate DATA state")
+            .expect("find duplicate DATA");
+        assert_eq!(link_state.n_entries.map(NonZeroU64::get), Some(4));
+
+        let mut entry_offsets = Vec::new();
+        journal_file
+            .entry_offsets(&mut entry_offsets)
+            .expect("collect duplicate entry offsets");
+        assert_eq!(entry_offsets.len(), 2);
+        for entry_offset in entry_offsets {
+            assert_eq!(
+                journal_file
+                    .entry_ref(entry_offset)
+                    .expect("duplicate entry ref")
+                    .items
+                    .len(),
+                2
+            );
+        }
+    }
+}
+
+#[test]
+fn compact_invalid_cached_tail_falls_back_to_authoritative_array_chain() {
+    let dir = TempDir::new().expect("create temp dir");
+    let path = dir.path().join("compact-tail-fallback.journal");
+    let repo_file =
+        crate::repository::File::from_path(&path).expect("test journal path should parse");
+    let mut journal_file = JournalFile::create(
+        &repo_file,
+        JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3)).with_compact(true),
+    )
+    .expect("create compact fallback journal");
+    let mut writer = JournalWriter::new(&mut journal_file, 1, test_uuid(4)).expect("create writer");
+    let payload = b"MESSAGE=compact-tail-fallback".as_slice();
+
+    for index in 0..2u64 {
+        writer
+            .add_entry(
+                &mut journal_file,
+                &[payload],
+                1_700_000_060_000_000 + index,
+                100 + index,
+            )
+            .expect("write compact fallback seed entry");
+    }
+    let hash = journal_file.hash(payload);
+    let (data_offset, original_state) = journal_file
+        .find_data_with_link_state_parts(hash, PayloadParts::raw(payload))
+        .expect("resolve compact DATA state")
+        .expect("find compact DATA");
+    let array_offset = original_state
+        .entry_array_offset
+        .expect("promoted compact DATA array");
+
+    {
+        let mut data_guard = journal_file
+            .data_mut(data_offset, None)
+            .expect("open compact DATA");
+        let DataPayloadType::Compact { compact_fields, .. } = &mut data_guard.payload else {
+            panic!("expected compact DATA");
+        };
+        compact_fields.tail_entry_array_offset = 8;
+        compact_fields.tail_entry_array_n_entries = 1;
+    }
+
+    writer
+        .add_entry(&mut journal_file, &[payload], 1_700_000_060_000_002, 102)
+        .expect("append through authoritative array fallback");
+
+    let (_, repaired_state) = journal_file
+        .find_data_with_link_state_parts(hash, PayloadParts::raw(payload))
+        .expect("resolve repaired compact DATA state")
+        .expect("find repaired compact DATA");
+    assert_eq!(repaired_state.n_entries.map(NonZeroU64::get), Some(3));
+    assert_eq!(repaired_state.entry_array_offset, Some(array_offset));
+    assert_eq!(repaired_state.compact_tail, Some((array_offset, 2)));
 }
 
 #[test]

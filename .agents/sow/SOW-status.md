@@ -8,11 +8,13 @@ Last updated: 2026-07-26
 
 ## Pending
 
-- SOW-0135 - Rust Writer Entry-Link State Reuse: open. Carries DATA link
-  metadata already resolved for the current entry into publication and opens a
-  non-full compact tail once, preserving byte/index/API compatibility and final
-  DATA-header publication ordering. Ready for activation after completed
-  SOW-0134.
+- SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
+  follow-up analysis for remaining global ENTRY-array and regular/fallback DATA
+  array reopens found during SOW-0135 review; no implementation is authorized.
+- SOW-0136 - Rust Directory Harness Explicit Identity: open. Tracks the
+  test-only repair needed for Rust compact/live directory-mode harnesses to
+  provide deterministic explicit synthetic identity without weakening the
+  production writer contract or adding host discovery.
 - SOW-0048 - Netdata OTEL Writer SDK Integration: open. Component integration
   for OTEL writer paths after inventory and writer gates.
 - SOW-0049 - Netdata Reader Plugin SDK Integration: open. Component integration
@@ -46,6 +48,13 @@ Last updated: 2026-07-26
   decisions. Not executable until the user explicitly resumes it.
 ## Recently Closed Or Completed
 
+- SOW-0135 - Rust Writer Entry-Link State Reuse: completed. The canonical Rust
+  writer now carries current-entry DATA link metadata already resolved during
+  lookup and opens a non-full compact tail once. The focused alternating
+  release benchmark improved 21.656% at the median with byte-identical output,
+  profiles reduced the targeted publication/mmap path, correctness and
+  interoperability gates passed, and all seven authorized external reviewers
+  returned `PRODUCTION GRADE`.
 - SOW-0134 - Rust Writer Repeating-DATA Diagnostics: completed. Added an exact
   Rust-only 29-application-field/30-ENTRY-item repeating-256 writer workload,
   preserved the historical default and compact/regular raw/structured bytes,

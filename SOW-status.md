@@ -11,10 +11,12 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Pending
 
-- `SOW-0135-20260726-rust-writer-entry-link-state-reuse.md` - open. Reuses
-  entry-local resolved DATA link metadata and one mutable compact-tail guard
-  without persistent cache or public/file-format changes. Ready for activation
-  after completed SOW-0134.
+- `SOW-0137-20260726-rust-writer-residual-array-open-performance.md` - open.
+  Tracks measurement and design decisions for remaining canonical Rust writer
+  global ENTRY-array and regular/fallback DATA array reopens.
+- `SOW-0136-20260726-rust-directory-harness-explicit-identity.md` - open.
+  Tracks deterministic explicit synthetic identity for Rust directory-mode
+  compact/live test harnesses without changing production writer behavior.
 - `SOW-0125-20260625-netdata-filter-operators-gap-analysis.md` - open, parked
   by user decision on 2026-06-25. Preserves string/numeric operator support
   matrix and semantic decisions; not executable until explicitly resumed.
@@ -35,6 +37,10 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 - `SOW-0098-20260607-rust-legacy-core-duplication-debt.md` - open. Follow-up from the Codacy Rust/Go metrics audit for real Rust `jf`/`journal-core` duplication reduction.
 ## Done
 
+- `SOW-0135-20260726-rust-writer-entry-link-state-reuse.md` - completed.
+  Reuses entry-local resolved DATA link state and one compact-tail mutable guard
+  in the canonical Rust writer; the focused median improved 21.656% with
+  byte-identical output and seven production-grade external reviews.
 - `SOW-0134-20260726-rust-writer-data-link-performance.md` - completed.
   Added the exact Rust-only repeating-256 writer workload, preserved historical
   defaults and compact/regular raw/structured bytes, and isolated repeated DATA

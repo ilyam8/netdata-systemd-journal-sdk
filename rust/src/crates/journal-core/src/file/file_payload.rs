@@ -29,10 +29,9 @@ pub enum RowPinnedPayload<'a> {
 }
 
 #[doc(hidden)]
-#[derive(Debug, Clone, Copy)]
-struct DataLookupResult {
+struct DataLookupResult<T> {
     next_hash_offset: Option<NonZeroU64>,
-    matches: bool,
+    match_value: Option<T>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -41,6 +40,25 @@ struct DataLookupHeader {
     size_needed: u64,
     stored_hash: u64,
     next_hash_offset: Option<NonZeroU64>,
+    entry_array_offset: Option<NonZeroU64>,
+    n_entries: Option<NonZeroU64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct ResolvedDataLinkState {
+    pub(super) n_entries: Option<NonZeroU64>,
+    pub(super) entry_array_offset: Option<NonZeroU64>,
+    pub(super) compact_tail: Option<(NonZeroU64, u64)>,
+}
+
+impl ResolvedDataLinkState {
+    pub(super) fn empty() -> Self {
+        Self {
+            n_entries: None,
+            entry_array_offset: None,
+            compact_tail: None,
+        }
+    }
 }
 
 impl DataLookupHeader {
@@ -417,6 +435,25 @@ impl<M: MemoryMap> JournalFile<M> {
         hash: u64,
         payload: PayloadParts<'_>,
     ) -> Result<Option<NonZeroU64>> {
+        Ok(self
+            .find_data_match_parts(hash, payload, |_, _, _| ())?
+            .map(|(offset, ())| offset))
+    }
+
+    pub(super) fn find_data_with_link_state_parts(
+        &self,
+        hash: u64,
+        payload: PayloadParts<'_>,
+    ) -> Result<Option<(NonZeroU64, ResolvedDataLinkState)>> {
+        self.find_data_match_parts(hash, payload, Self::resolved_data_link_state)
+    }
+
+    fn find_data_match_parts<T>(
+        &self,
+        hash: u64,
+        payload: PayloadParts<'_>,
+        matched: impl Fn(DataPayloadReadContext, DataLookupHeader, &[u8]) -> T,
+    ) -> Result<Option<(NonZeroU64, T)>> {
         let hash_table = self
             .data_hash_table_ref()
             .ok_or(JournalError::MissingHashTable)?;
@@ -431,9 +468,10 @@ impl<M: MemoryMap> JournalFile<M> {
                 hash,
                 payload,
                 &mut decompression_buffer,
+                &matched,
             )?;
-            if result.matches {
-                return Ok(Some(offset));
+            if let Some(match_value) = result.match_value {
+                return Ok(Some((offset, match_value)));
             }
             object_offset = result.next_hash_offset;
         }
@@ -441,21 +479,22 @@ impl<M: MemoryMap> JournalFile<M> {
         Ok(None)
     }
 
-    fn data_lookup_result_at(
+    fn data_lookup_result_at<T>(
         &self,
         context: DataPayloadReadContext,
         offset: NonZeroU64,
         hash: u64,
         payload: PayloadParts<'_>,
         decompression_buffer: &mut Vec<u8>,
-    ) -> Result<DataLookupResult> {
+        matched: &impl Fn(DataPayloadReadContext, DataLookupHeader, &[u8]) -> T,
+    ) -> Result<DataLookupResult<T>> {
         Self::validate_data_payload_offset(context, offset)?;
         self.window_manager.with_mut(|wm| {
             let lookup = Self::data_lookup_header_from_window(wm, context, offset)?;
             if lookup.stored_hash != hash {
                 return Ok(DataLookupResult {
                     next_hash_offset: lookup.next_hash_offset,
-                    matches: false,
+                    match_value: None,
                 });
             }
 
@@ -467,9 +506,10 @@ impl<M: MemoryMap> JournalFile<M> {
                 payload,
                 decompression_buffer,
             )?;
+            let match_value = matches.then(|| matched(context, lookup, data));
             Ok(DataLookupResult {
                 next_hash_offset: lookup.next_hash_offset,
-                matches,
+                match_value,
             })
         })
     }
@@ -508,7 +548,48 @@ impl<M: MemoryMap> JournalFile<M> {
             next_hash_offset: NonZeroU64::new(u64::from_le_bytes(
                 header_slice[24..32].try_into().unwrap(),
             )),
+            entry_array_offset: Self::optional_nonzero_u64_field::<DataObjectHeader>(
+                header_slice,
+                std::mem::offset_of!(DataObjectHeader, entry_array_offset),
+            ),
+            n_entries: Self::optional_nonzero_u64_field::<DataObjectHeader>(
+                header_slice,
+                std::mem::offset_of!(DataObjectHeader, n_entries),
+            ),
         })
+    }
+
+    fn optional_nonzero_u64_field<T>(data: &[u8], offset: usize) -> Option<NonZeroU64> {
+        debug_assert!(offset + std::mem::size_of::<u64>() <= std::mem::size_of::<T>());
+        NonZeroU64::new(u64::from_le_bytes(
+            data[offset..offset + std::mem::size_of::<u64>()]
+                .try_into()
+                .unwrap(),
+        ))
+    }
+
+    fn resolved_data_link_state(
+        context: DataPayloadReadContext,
+        lookup: DataLookupHeader,
+        data: &[u8],
+    ) -> ResolvedDataLinkState {
+        let compact_tail = context.is_compact.then(|| {
+            let fields_offset = std::mem::size_of::<DataObjectHeader>();
+            let tail_offset = NonZeroU64::new(u32::from_le_bytes(
+                data[fields_offset..fields_offset + 4].try_into().unwrap(),
+            ) as u64)?;
+            let tail_entries = u32::from_le_bytes(
+                data[fields_offset + 4..fields_offset + 8]
+                    .try_into()
+                    .unwrap(),
+            ) as u64;
+            (tail_entries != 0).then_some((tail_offset, tail_entries))
+        });
+        ResolvedDataLinkState {
+            n_entries: lookup.n_entries,
+            entry_array_offset: lookup.entry_array_offset,
+            compact_tail: compact_tail.flatten(),
+        }
     }
 
     fn data_lookup_payload_matches(
