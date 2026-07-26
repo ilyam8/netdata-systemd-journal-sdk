@@ -2047,7 +2047,7 @@ def run_follow_cases(tools: dict[str, str], fixtures: dict[str, Path]) -> list[d
         {
             "name": "follow-live-append-no-tail",
             "test_id": "journalctl-follow",
-            "args": ["--follow", "--no-tail", "--boot=all"],
+            "args": ["--follow", "--no-tail", "--boot=all", "--merge"],
             "initial": [],
             "appends": [(f"follow-{i}", 1_700_004_200_000_000 + i) for i in range(3)],
             "expected": ["follow-0", "follow-1", "follow-2"],
@@ -2055,7 +2055,7 @@ def run_follow_cases(tools: dict[str, str], fixtures: dict[str, Path]) -> list[d
         {
             "name": "follow-cursor-file-no-tail",
             "test_id": "journalctl-follow-cursor-file",
-            "args": ["--follow", "--no-tail", "--boot=all"],
+            "args": ["--follow", "--no-tail", "--boot=all", "--merge"],
             "initial": [],
             "appends": [("cursor-follow-0", 1_700_004_250_000_000)],
             "expected": ["cursor-follow-0"],
@@ -2064,7 +2064,7 @@ def run_follow_cases(tools: dict[str, str], fixtures: dict[str, Path]) -> list[d
         {
             "name": "follow-default-tail",
             "test_id": "journalctl-follow-tail",
-            "args": ["--follow", "--boot=all"],
+            "args": ["--follow", "--boot=all", "--merge"],
             "initial": [(f"tail-initial-{i:02d}", 1_700_004_300_000_000 + i) for i in range(12)],
             "appends": [(f"tail-new-{i}", 1_700_004_300_001_000 + i) for i in range(2)],
             "expected": [f"tail-initial-{i:02d}" for i in range(2, 12)] + ["tail-new-0", "tail-new-1"],
@@ -2072,7 +2072,7 @@ def run_follow_cases(tools: dict[str, str], fixtures: dict[str, Path]) -> list[d
         {
             "name": "follow-lines-since",
             "test_id": "journalctl-follow-lines-since",
-            "args": ["--follow", "--lines=2", "--since", "@1700004300", "--boot=all"],
+            "args": ["--follow", "--lines=2", "--since", "@1700004300", "--boot=all", "--merge"],
             "initial": [(f"lines-since-initial-{i}", 1_700_004_300_000_000 + i) for i in range(4)],
             "appends": [("lines-since-new", 1_700_004_300_001_000)],
             "expected": ["lines-since-initial-2", "lines-since-initial-3", "lines-since-new"],
@@ -2089,7 +2089,7 @@ def run_follow_cases(tools: dict[str, str], fixtures: dict[str, Path]) -> list[d
             "name": "follow-directory-no-tail",
             "mode": "directory",
             "test_id": "journalctl-follow-directory",
-            "args": ["--follow", "--no-tail", "--boot=all"],
+            "args": ["--follow", "--no-tail", "--boot=all", "--merge"],
             "initial": [],
             "appends": [(f"dir-follow-{i}", 1_700_004_400_000_000 + i) for i in range(2)],
             "expected": ["dir-follow-0", "dir-follow-1"],

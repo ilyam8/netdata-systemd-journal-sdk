@@ -247,8 +247,10 @@ def journalctl_follow_command(args):
         "--follow",
         "--no-tail",
         # journalctl enables current-boot filtering by default in follow mode.
-        # Synthetic journals use synthetic boot IDs, so clear that implicit filter.
+        # These fixtures have no indexed _BOOT_ID DATA, so clear that implicit filter.
+        # --merge keeps systemd 255 from re-enabling it; --file still fixes the source.
         "--boot=all",
+        "--merge",
         "--output=json",
         "--quiet",
         "--no-pager",

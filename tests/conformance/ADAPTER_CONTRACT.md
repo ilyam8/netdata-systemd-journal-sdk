@@ -176,13 +176,15 @@ Writer live-test commands must:
 The harness then runs these readers while the writer is still appending:
 
 - stock `journalctl --file` polling readers;
-- stock `journalctl --file --follow --no-tail --boot=all` readers;
+- stock `journalctl --file --follow --no-tail --boot=all --merge` readers;
 - stock libsystemd readers compiled from `libsystemd_live_reader.c`.
 
 All live readers validate the configured sequence field so publication-window
-bugs cannot pass by exposing entries out of order. `--boot=all` is required for
-`journalctl --follow` because stock journalctl enables current-boot filtering in
-follow mode, while these compatibility fixtures use synthetic boot IDs.
+bugs cannot pass by exposing entries out of order. `--boot=all` explicitly
+disables boot filtering. `--merge` suppresses journalctl's implicit
+follow-mode current-boot default, which pre-tristate systemd releases such as
+255 re-enable even after `--boot=all`; `--file` keeps the input limited to the
+synthetic journal.
 
 The polling and follow `journalctl --file` readers, plus stock libsystemd
 readers, may retry transient active-writer `ENODATA` open/read failures or

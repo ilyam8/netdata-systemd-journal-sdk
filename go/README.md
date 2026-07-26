@@ -35,8 +35,8 @@ Current writer scope:
 - native systemd writers do not participate in the SDK lock protocol and remain
   an operational exclusion;
 - live stock-reader validation for the current writer slice with `journalctl
-  --file`, `journalctl --file --follow --no-tail --boot=all`, and libsystemd
-  reader APIs, including live sequence-order checks;
+  --file`, `journalctl --file --follow --no-tail --boot=all --merge`, and
+  libsystemd reader APIs, including live sequence-order checks;
 - configurable explicit live-reader publication cadence through
   `Options.LivePublishEveryEntries`, defaulting to systemd-compatible
   publication after every entry;

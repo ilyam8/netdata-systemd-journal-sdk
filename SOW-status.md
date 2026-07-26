@@ -11,9 +11,6 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Pending
 
-- `SOW-0139-20260726-go-live-journalctl-boot-selector-compatibility.md` - open.
-  Tracks three pre-existing Go live-test failures reproduced at the unchanged
-  base commit on systemd 255; no implementation is authorized.
 - `SOW-0137-20260726-rust-writer-residual-array-open-performance.md` - open.
   Tracks measurement and design decisions for remaining canonical Rust writer
   global ENTRY-array and regular/fallback DATA array reopens.
@@ -40,6 +37,11 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 - `SOW-0098-20260607-rust-legacy-core-duplication-debt.md` - open. Follow-up from the Codacy Rust/Go metrics audit for real Rust `jf`/`journal-core` duplication reduction.
 ## Done
 
+- `SOW-0139-20260726-go-live-journalctl-boot-selector-compatibility.md` -
+  completed. Repairs every equivalent stock follow invocation using explicit
+  `--boot=all`; the complete Go suite and 21/21 stock/Go/Rust follow
+  combinations pass on systemd 255 and tagged 260.1 without production SDK
+  changes.
 - `SOW-0138-20260726-go-writer-entry-link-state-reuse.md` - completed.
   Reuses current-entry resolved DATA link state and a validated compact-tail
   mapped mutation path in the Go writer; the focused median improved 10.705%

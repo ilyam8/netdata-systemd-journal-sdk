@@ -7,7 +7,7 @@ The harness validates that a repository writer can append to a journal file
 while stock readers observe the same file safely:
 
 - stock `journalctl --file` polling readers;
-- stock `journalctl --file --follow --no-tail --boot=all` readers;
+- stock `journalctl --file --follow --no-tail --boot=all --merge` readers;
 - stock libsystemd readers built from `libsystemd_live_reader.c`.
 
 Writers are invoked as external commands. A writer command must:

@@ -361,9 +361,11 @@ The matrix validates:
   and boot UUID plus signed offsets;
 - combined `--boot`, `--since`, and `--until` filtering;
 - the same boot and realtime behavior for both `--file` and `--directory`;
-- live file and directory `--follow --no-tail --boot=all`, default-tail
-  `--follow`, and `--follow --no-tail --boot=0 --since ...` output while a
-  repository writer appends entries to an active file.
+- live file and directory `--follow --no-tail --boot=all --merge`,
+  default-tail `--follow --boot=all --merge`,
+  `--follow --lines=2 --since ... --boot=all --merge`,
+  `--follow --no-tail --boot=0 --since ...`, and implicit current-boot
+  filtering while a repository writer appends entries to an active file.
 
 ## Shared Conventions
 
