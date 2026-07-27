@@ -4,8 +4,9 @@ Last updated: 2026-07-27
 
 ## Current
 
-- SOW-0141 - v0.8.0 Dependency Refresh: in progress. Dependency migration
-  resumed after both pre-existing validation regressions were repaired.
+- SOW-0141 - v0.8.0 Dependency Refresh: local candidate validation and
+  external-review disposition complete; awaiting the final release checkpoint
+  and post-push remote scanning gate.
 
 ## Pending
 
@@ -197,11 +198,14 @@ Last updated: 2026-07-27
 - SOW-0119 - Codacy Severe Findings Except Go Version: completed after
   regression repair. Codacy reanalysis after the repair reports 23 issue rows,
   all in `go/go.mod`; the 14 Critical/High rows are also all in `go/go.mod`.
-  These are the user-approved SCA cluster tied to the unchanged `go 1.26`
-  directive, and no non-Go Codacy issues remain. Validation passed targeted
-  Lizard, Bandit, Pylint, markdownlint, docs checks, verified examples, Python
-  retired-experiment suites, full Go tests, full Rust workspace tests,
-  whitespace checks, and SOW audit. The 2026-06-19 regression repair changed no
+  These are the user-approved SCA cluster previously tied to the `go 1.26`
+  directive; SOW-0141 refreshes that directive to `go 1.26.2` and requires
+  the rewritten module graph to pass the current security/release gates. No
+  non-Go Codacy issues remained in the recorded analysis. Validation passed
+  targeted Lizard, Bandit, Pylint, markdownlint, docs checks, verified
+  examples, Python retired-experiment suites, full Go tests, full Rust
+  workspace tests, whitespace checks, and SOW audit. The 2026-06-19 regression
+  repair changed no
   Rust or Go source files, so no new Rust/Go external review was required beyond
   the original SOW reviewer gate.
 - SOW-0118 - Host Helper Release And Netdata Integration Planning: completed.

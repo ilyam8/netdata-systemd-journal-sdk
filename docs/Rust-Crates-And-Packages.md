@@ -6,7 +6,7 @@ Use `systemd-journal-sdk` for normal Rust integrations:
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.7.9" }
+journal = { package = "systemd-journal-sdk", version = "0.8.0" }
 ```
 
 The alias keeps source imports in the form:
@@ -31,6 +31,11 @@ these surfaces.
 | `systemd-journal-sdk-host` | Optional local-host machine ID, boot ID, and monotonic timestamp helpers. | Use only when the event source is intentionally the local host. |
 | `systemd-journal-sdk-index` | Index/filter structures used by query engines. | Specialized query/index consumers. |
 | `systemd-journal-sdk-engine` | Higher-level query/index engine building blocks. | Specialized query engines. |
+
+`systemd-journal-sdk-engine` exposes Foyer types through `FileIndexCache` and
+`EngineError`. In SDK `0.8.0`, those surfaces follow the Foyer `0.22` API.
+Consumers that name Foyer types directly must use Foyer `0.22`; code that
+calls `FileIndexCache` methods must use the `0.22` method names.
 
 ## Recommended Rust Dependency Choices
 

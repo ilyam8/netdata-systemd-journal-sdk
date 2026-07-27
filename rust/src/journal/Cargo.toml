@@ -18,7 +18,6 @@ name = "journal"
 [dependencies]
 # Internal crates
 journal-core = { workspace = true }
-journal-common = { workspace = true }
 journal-registry = { workspace = true }
 journal-log-writer = { workspace = true }
 
@@ -26,18 +25,10 @@ journal-log-writer = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-# Memory mapping
-memmap2 = { workspace = true }
-
-# Error handling
-thiserror = { workspace = true }
-anyhow = { workspace = true }
-
 # Utilities
 chrono = { workspace = true }
 libc = { workspace = true }
 uuid = { workspace = true }
-walkdir = { workspace = true }
 hex = { workspace = true }
 ouroboros = { workspace = true }
 tempfile = { workspace = true }

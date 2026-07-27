@@ -666,7 +666,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     fn generate_uuid() -> [u8; 16] {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         rng.random()
     }

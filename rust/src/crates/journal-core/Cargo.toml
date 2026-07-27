@@ -37,11 +37,6 @@ uuid = { workspace = true , features = ["v4", "rng", "serde"] }
 ruzstd = { workspace = true }
 zstd = { workspace = true }
 siphasher = { workspace = true }
-md5 = { workspace = true }
-hashers = { workspace = true }
-
-twox-hash = { workspace = true, features = ["std"] }
-rand = { workspace = true }
 
 lz4_flex = { workspace = true }
 lzma-rust2 = { workspace = true }
@@ -51,14 +46,7 @@ serde = { workspace = true, features = ["derive"] }
 rustc-hash = { workspace = true }
 
 # Registry dependencies
-parking_lot = { workspace = true }
-walkdir = { workspace = true }
-crossbeam-channel = { workspace = true }
-regex = { workspace = true }
-chrono = { workspace = true, features = ["serde"] }
 serde_json = { workspace = true }
-anyhow = { workspace = true }
-notify = { workspace = true }
 
 tracing = { workspace = true }
 allocative = { workspace = true, optional = true }
@@ -68,14 +56,9 @@ num-bigint = { workspace = true }
 sha2 = { workspace = true }
 hmac = { workspace = true }
 
-tokio = { workspace = true, features = ["rt", "sync", "macros", "rt-multi-thread"] }
-
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_Threading"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-rayon = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-tracing-subscriber = { workspace = true }
 hex = { workspace = true }

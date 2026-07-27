@@ -1,6 +1,6 @@
 use super::reader_helpers::verify_journal_file_strict;
 use super::*;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use journal_core::fss::{RECOMMENDED_SECPAR, gen_mk, gen_state0, get_key, seek};
 use journal_core::seal::TAG_LENGTH;
 use sha2::Sha256;

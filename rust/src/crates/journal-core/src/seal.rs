@@ -17,7 +17,7 @@ use crate::file::ObjectType;
 use crate::fss::{
     RECOMMENDED_SECPAR, RECOMMENDED_SEEDLEN, evolve, gen_mk, gen_state0, get_epoch, get_key,
 };
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 pub const TAG_LENGTH: usize = 256 / 8;

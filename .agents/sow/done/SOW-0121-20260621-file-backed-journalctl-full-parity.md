@@ -2152,7 +2152,7 @@ Final validation gate after strict reviewer closure - 2026-06-21:
 
 ## Regression - 2026-07-27 Mixed-Directory Boot-Row Oracle
 
-Status: in-progress.
+Status: completed.
 
 ### What Broke
 

@@ -128,10 +128,7 @@ impl FileIndexCacheBuilder {
             return memory.storage().build().await.map_err(Into::into);
         }
 
-        use foyer::{
-            BlockEngineBuilder, DeviceBuilder, FsDeviceBuilder, IoEngineBuilder,
-            PsyncIoEngineBuilder,
-        };
+        use foyer::{BlockEngineConfig, DeviceBuilder, FsDeviceBuilder, PsyncIoEngineConfig};
 
         let cache_path = self
             .cache_path
@@ -149,9 +146,9 @@ impl FileIndexCacheBuilder {
 
         let cache = memory
             .storage()
-            .with_io_engine(PsyncIoEngineBuilder::new().build().await?)
+            .with_io_engine_config(PsyncIoEngineConfig::new())
             .with_engine_config(
-                BlockEngineBuilder::new(
+                BlockEngineConfig::new(
                     FsDeviceBuilder::new(&cache_path)
                         .with_capacity(disk_capacity)
                         .build()?,

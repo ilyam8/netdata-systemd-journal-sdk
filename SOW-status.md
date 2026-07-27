@@ -7,8 +7,9 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Current
 
-- `SOW-0141-20260727-v0-8-0-dependency-refresh.md` - in progress again after
-  both pre-existing validation regressions were repaired.
+- `SOW-0141-20260727-v0-8-0-dependency-refresh.md` - local `0.8.0` candidate
+  validation and external-review disposition complete; awaiting the final
+  release checkpoint and post-push remote scanning gate.
 
 ## Pending
 
@@ -103,7 +104,7 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
   `github.com/netdata/systemd-journal-sdk/go v0.7.4`, all eight Rust crates
   were visible through `cargo info`, and the Netdata host-helper SOW was
   updated to point at the release.
-- `SOW-0119-20260618-codacy-severe-findings-except-go-version.md` - completed after regression repair. Codacy reanalysis after the repair reports 23 issue rows, all in `go/go.mod`; the 14 Critical/High rows are also all in `go/go.mod`. These are the accepted SCA cluster, and the Go directive remains `go 1.26`.
+- `SOW-0119-20260618-codacy-severe-findings-except-go-version.md` - completed after regression repair. Codacy reanalysis after the repair reports 23 issue rows, all in `go/go.mod`; the 14 Critical/High rows are also all in `go/go.mod`. These are the accepted historical SCA cluster for the previous `go 1.26` directive; SOW-0141 refreshes that directive to `go 1.26.2` and requires the rewritten module graph to pass the current security/release gates.
 - `SOW-0117-20260617-v0-7-2-release.md` - completed. Rust crates were published to crates.io at `0.7.2`, `master` was pushed through release commit `400bddde36d1e41a2b17943076752567a0826407`, and annotated tags `v0.7.2` plus `go/v0.7.2` were pushed; both peel to the same release commit. Full Rust/Go tests, wiki validation, verified examples, `git diff --check`, SOW audit, six read-only reviewer votes, crates.io search, and Go module lookup passed.
 - `SOW-0116-20260616-retire-python-node-targets.md` - completed. Python and Node.js tracked implementations were moved under `experiments/` as non-product retired experiments; active product docs, specs, CI, validation defaults, project skills, and pending/current SOW scope now target Rust and Go only. Validation included docs checks, verified examples, runtime purity, Netdata function tests, coverage script checks, SOW audit, `git diff --check`, and end-to-end interoperability matrices for query, compact, compression, mixed-directory, lock, verify, directory, binary, live, and byte identity paths. Final external review returned 6/7 `READY TO COMPLETE`; the remaining reviewer finding was explicit staging of new files, resolved during close.
 - `SOW-0113-20260615-nodejs-optional-native-mmap-reader.md` - closed without implementation on 2026-06-16. Superseded by SOW-0116, which retired the Node.js implementation to `experiments/` and removed it from product SDK scope.

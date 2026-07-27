@@ -11,26 +11,26 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.91"
 
 [workspace.lints.clippy]
 collapsible_if = "allow"
 
 [workspace.dependencies]
-memmap2 = "0.9"
+memmap2 = "0.9.11"
 zerocopy = { version = "0.9.0-alpha.0", features = ["derive"] }
-thiserror = "2"
-rand = "0.9"
-siphasher = "1.0"
-hashers = "1.0"
-static_assertions = "1.1"
-serde_json = "1.0"
-ruzstd = "0.8.3"
-lz4_flex = { version = "0.13.1", default-features = false, features = ["std", "safe-decode", "checked-decode"] }
-lzma-rust2 = { version = "0.16.3", default-features = false, features = ["std", "xz"] }
-libc = "0.2"
-tempfile = "3"
-cbindgen = "0.28.0"
+thiserror = "2.0.19"
+rand = "0.10.2"
+siphasher = "1.0.3"
+hashers = "1.0.1"
+static_assertions = "1.1.0"
+serde_json = "1.0.151"
+ruzstd = "0.9.0"
+lz4_flex = { version = "0.14.0", default-features = false, features = ["std", "safe-decode", "checked-decode"] }
+lzma-rust2 = { version = "0.18.0", default-features = false, features = ["std", "xz"] }
+libc = "0.2.189"
+tempfile = "3.27.0"
+cbindgen = "0.29.4"
 
 [profile.release]
 lto = true

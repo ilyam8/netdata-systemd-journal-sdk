@@ -23,7 +23,6 @@ allocative = ["dep:allocative"]
 
 [dependencies]
 rustc-hash = { workspace = true }
-uuid = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 allocative = { workspace = true, optional = true }
 

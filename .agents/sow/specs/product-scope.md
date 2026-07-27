@@ -7,8 +7,8 @@ systemd journal files in Rust and Go.
 
 ## Language Targets
 
-- Rust
-- Go
+- Rust 1.91 or newer
+- Go 1.26.2 or newer
 
 ## Rust Registry Packages
 
@@ -18,7 +18,7 @@ alias it as `journal` in Cargo dependencies to keep the existing
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.7.9" }
+journal = { package = "systemd-journal-sdk", version = "0.8.0" }
 ```
 
 The Rust workspace also publishes lower-level project-prefixed packages for

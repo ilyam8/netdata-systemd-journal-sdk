@@ -40,11 +40,7 @@ pub enum EngineError {
 
     /// Foyer cache error
     #[error("Cache error: {0}")]
-    Foyer(#[from] foyer::Error),
-
-    /// Foyer IO engine error
-    #[error("Foyer IO error: {0}")]
-    FoyerIo(#[from] foyer::IoError),
+    Foyer(#[source] Box<foyer::Error>),
 
     /// Operation was cancelled
     #[error("Operation cancelled")]
@@ -55,7 +51,27 @@ pub enum EngineError {
     InvalidTimeRange { start: u32, end: u32 },
 }
 
+impl From<foyer::Error> for EngineError {
+    fn from(error: foyer::Error) -> Self {
+        Self::Foyer(Box::new(error))
+    }
+}
+
 static_assertions::const_assert!(std::mem::size_of::<EngineError>() <= 64);
 
 /// A specialized Result type for engine operations
 pub type Result<T> = std::result::Result<T, EngineError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn foyer_errors_are_boxed_within_the_engine_error_size_bound() {
+        let error = foyer::Error::new(foyer::ErrorKind::Config, "test error");
+        let error = EngineError::from(error);
+
+        assert!(matches!(error, EngineError::Foyer(_)));
+        assert!(std::mem::size_of::<EngineError>() <= 64);
+    }
+}

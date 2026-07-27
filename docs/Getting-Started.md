@@ -15,11 +15,13 @@ sync, flush, rotate, or relinquish-var.
 
 ## Install Rust
 
+Rust 1.91 or newer is required.
+
 Use the public Rust package for normal integrations:
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.7.9" }
+journal = { package = "systemd-journal-sdk", version = "0.8.0" }
 ```
 
 The alias keeps imports short:
@@ -35,8 +37,10 @@ layout.
 
 ## Install Go
 
+Go 1.26.2 or newer is required.
+
 ```sh
-go get github.com/netdata/systemd-journal-sdk/go@v0.7.8
+go get github.com/netdata/systemd-journal-sdk/go@v0.8.0
 ```
 
 Then import:
