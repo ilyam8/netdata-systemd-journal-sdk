@@ -7,9 +7,7 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Current
 
-- `SOW-0141-20260727-v0-8-0-dependency-refresh.md` - local `0.8.0` candidate
-  validation and external-review disposition complete; awaiting the final
-  release checkpoint and post-push remote scanning gate.
+- None.
 
 ## Pending
 
@@ -37,6 +35,11 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0141-20260727-v0-8-0-dependency-refresh.md` - completed. Released Rust
+  and Go `0.8.0` from commit
+  `4619776b74311338b1689b2ab1fb0936b7746e49`; both tags resolve to that commit,
+  all eight Rust crates are published and non-yanked, and clean Go `1.26.2`
+  and Rust `1.91.0` registry-consumer checks pass.
 - `SOW-0121-20260621-file-backed-journalctl-full-parity.md` - completed again
   after replacing the mixed-directory count-only boot assertion with complete
   normalized stock-oracle row comparison and an oracle-completeness check.

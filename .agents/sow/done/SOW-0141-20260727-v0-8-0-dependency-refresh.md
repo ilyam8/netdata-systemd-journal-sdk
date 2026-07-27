@@ -2,11 +2,10 @@
 
 ## Status
 
-Status: in-progress
+Status: completed
 
-Sub-state: local implementation, validation, and external-review disposition
-complete. The post-push GitHub code-scanning and Codacy gates are
-dispositioned. Awaiting the final release checkpoint.
+Sub-state: released on 2026-07-27. Root and Go tags are published, all eight
+Rust crates are published, and clean registry-consumer verification passes.
 
 ## Requirements
 
@@ -283,7 +282,8 @@ Validation plan:
 
 Artifact impact plan:
 
-- AGENTS.md: no update expected; product and workflow contracts are unchanged.
+- AGENTS.md: no initial update expected. The final scanner disposition exposed
+  a durable toolchain-policy requirement, which was added before release.
 - Runtime project skills: release-tagging skill will be used and updated only
   if validation exposes a durable workflow gap.
 - Specs: update product scope for `0.8.0` and aligned compiler minimums.
@@ -315,8 +315,8 @@ Open decisions:
 - None for implementation. The user approved boxing Foyer `0.22.3` errors so
   the public error variant holds `Box<foyer::Error>` and the existing 64-byte
   `EngineError` compile-time bound remains enforced.
-- Immutable tags and registry publication remain deliberately unapproved until
-  final evidence is reported.
+- Immutable tags and registry publication were deliberately withheld until
+  final evidence was reported, then explicitly approved and completed.
 
 ## Implications And Decisions
 
@@ -437,7 +437,8 @@ Failure handling:
   file-format, durability, cache-schema, or compatibility change.
 - Record and investigate every test, interoperability, security, integration,
   and benchmark failure before continuing.
-- Do not publish, tag, force, reset, checkout, or alter external repositories.
+- Do not publish or tag before final user approval; never force, reset,
+  checkout, or alter external repositories.
 
 ## Execution Log
 
@@ -607,8 +608,8 @@ Acceptance criteria evidence:
   bytes.
 - Full compiler-floor/current-toolchain, compatibility, Netdata integration,
   package, docs, and performance evidence below passes.
-- The candidate identifies `0.8.0` consistently. No immutable action was
-  performed.
+- The candidate identified `0.8.0` consistently before the approved immutable
+  release actions recorded below.
 
 Tests or equivalent validation:
 
@@ -742,6 +743,35 @@ Post-push code-scanning disposition:
   rejected raising SDK compiler requirements above Netdata's declarations;
   these Trivy rows are accepted scanner-floor findings and do not block the
   release.
+- The user approved the immutable release checkpoint. Annotated `v0.8.0` and
+  `go/v0.8.0` tags were created and pushed; both peel to
+  `4619776b74311338b1689b2ab1fb0936b7746e49`.
+- The first `cargo publish --dry-run` used the host's default Rust `1.90.0` and
+  correctly rejected the crate's Rust `1.91` minimum before any upload. Work
+  stopped, the user approved the revised exact-toolchain invocation, and every
+  subsequent dry-run and publication used the already-validated
+  repository-local Rust `1.91.0` toolchain.
+- Dry-run and publication succeeded sequentially for all non-yanked `0.8.0`
+  packages:
+  - `systemd-journal-sdk-common`;
+  - `systemd-journal-sdk-registry`;
+  - `systemd-journal-sdk-core`;
+  - `systemd-journal-sdk-host`;
+  - `systemd-journal-sdk-log-writer`;
+  - `systemd-journal-sdk-index`;
+  - `systemd-journal-sdk-engine`;
+  - `systemd-journal-sdk`.
+- The first Go checksum-database lookup returned a transient HTTP 500 after the
+  public proxy had already resolved the correct tag and commit. Work stopped,
+  the checksum endpoint was observed returning its signed HTTP 200 record, and
+  the user approved the retry.
+- Clean final registry-consumer verification passed:
+  - exact Go `1.26.2` downloaded
+    `github.com/netdata/systemd-journal-sdk/go@v0.8.0` through
+    `proxy.golang.org` with `sum.golang.org` verification and origin commit
+    `4619776b74311338b1689b2ab1fb0936b7746e49`;
+  - exact Rust `1.91.0` resolved and checked
+    `systemd-journal-sdk = "=0.8.0"` from crates.io.
 
 Same-failure scan:
 
@@ -768,7 +798,9 @@ Sensitive data gate:
 
 Artifact maintenance gate:
 
-- AGENTS.md: no update; workflow and runtime contracts did not change.
+- AGENTS.md: records that Netdata's consuming-module declarations control SDK
+  compiler minimums and that scanner findings cannot be cleared by breaking
+  Netdata compatibility.
 - Runtime project skills: no update; release-tagging and docs-authoring rules
   remain accurate.
 - Specs: product scope identifies `0.8.0`, Rust `1.91`, and Go `1.26.2`.
@@ -777,9 +809,9 @@ Artifact maintenance gate:
   Rust package guide records the Foyer `0.22` coupling exposed through the
   engine crate.
 - End-user/operator skills: none expected.
-- SOW lifecycle: current/in-progress until the final user release checkpoint
-  and post-push remote scanning gate.
-- SOW-status.md: both ledgers continue to identify SOW-0141 as current.
+- SOW lifecycle: completed and moved to `done` after publication and clean
+  registry-consumer verification.
+- SOW-status.md: both ledgers identify SOW-0141 as completed.
 
 Specs update:
 
@@ -815,20 +847,17 @@ Lessons:
 
 Follow-up mapping:
 
-- Sequential Rust publication, root/Go tags, branch push, and registry
-  verification remain final-checkpoint actions in this SOW, not follow-up code
-  work.
+- Netdata integration can now consume the public Rust `0.8.0` crates and Go
+  `v0.8.0` module. That consumer work is outside this completed SDK release SOW.
 
 ## Outcome
 
-The local `0.8.0` dependency-refresh candidate is implemented and validated.
-All correctness, compatibility, integration, documentation, packaging-list,
-and performance gates pass. The only blocked dry-run is the expected crates.io
-dependency order after the common crate. External-review findings are
-dispositioned with the documented Codex/MiniMax coverage gaps. GitHub code
-scanning has zero open alerts after the retired-target disposition. The Codacy
-Go-floor findings are explicitly accepted under the Netdata-controlled
-toolchain policy. Only the user's explicit immutable-release checkpoint remains.
+Version `0.8.0` is released. All correctness, compatibility, integration,
+documentation, packaging, performance, external-review-disposition, and remote
+scanning gates pass. Both Git tags resolve to the release commit, all eight Rust
+packages are available and non-yanked on crates.io, and clean Go `1.26.2` and
+Rust `1.91.0` registry-consumer checks pass. The Codacy Go-floor findings remain
+explicitly accepted under the Netdata-controlled toolchain policy.
 
 ## Lessons Extracted
 
@@ -841,9 +870,8 @@ toolchain policy. Only the user's explicit immutable-release checkpoint remains.
 
 ## Followup
 
-- None for code. Publication proceeds sequentially only after explicit user
-  approval and clean/dispositioned post-push GitHub code-scanning and Codacy
-  results.
+- Integrate the released SDK into Netdata and perform the authoritative
+  workload-specific end-to-end retest there.
 
 ## Regression Log
 

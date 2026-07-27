@@ -4,9 +4,7 @@ Last updated: 2026-07-27
 
 ## Current
 
-- SOW-0141 - v0.8.0 Dependency Refresh: local candidate validation and
-  external-review disposition complete; awaiting the final release checkpoint
-  and post-push remote scanning gate.
+- None.
 
 ## Pending
 
@@ -47,6 +45,11 @@ Last updated: 2026-07-27
 
 ## Recently Closed Or Completed
 
+- SOW-0141 - v0.8.0 Dependency Refresh: completed. Released coordinated Rust
+  and Go `0.8.0` from commit
+  `4619776b74311338b1689b2ab1fb0936b7746e49`; both release tags resolve to that
+  commit, all eight Rust crates are published and non-yanked, and clean Go
+  `1.26.2` and Rust `1.91.0` registry-consumer verification passes.
 - SOW-0121 - File-Backed Journalctl Full Parity And Ship Decision: completed
   again after repairing its mixed-directory boot-row oracle. The harness now
   strips only the stock table header, requires a complete stock oracle, and
