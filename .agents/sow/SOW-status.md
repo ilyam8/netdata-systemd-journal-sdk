@@ -4,10 +4,8 @@ Last updated: 2026-07-27
 
 ## Current
 
-- SOW-0141 - v0.8.0 Dependency Refresh: in progress after the completed
-  SOW-0115 regression repair restored Rust directory-mode interoperability.
-  Aligns compiler minimums, refreshes dependencies, and runs complete
-  correctness, integration, performance, and release-candidate gates.
+- SOW-0141 - v0.8.0 Dependency Refresh: in progress. Dependency migration
+  resumed after both pre-existing validation regressions were repaired.
 
 ## Pending
 
@@ -48,6 +46,11 @@ Last updated: 2026-07-27
 
 ## Recently Closed Or Completed
 
+- SOW-0121 - File-Backed Journalctl Full Parity And Ship Decision: completed
+  again after repairing its mixed-directory boot-row oracle. The harness now
+  strips only the stock table header, requires a complete stock oracle, and
+  compares every normalized boot row; the full-feature mixed matrix passed
+  42/42 and tagged-v260.1 directory/query validation passed.
 - SOW-0136 - Rust Directory Harness Explicit Identity: closed without
   implementation. Its evidence is merged into the user-approved regression
   reopening of originating SOW-0115.
@@ -168,17 +171,6 @@ Last updated: 2026-07-27
   Rust/Go and four scenarios, whitespace checks, SOW audit, and second-round
   read-only reviewer votes from glm, kimi, mimo, deepseek, and qwen all voting
   `READY TO COMPLETE: YES`.
-- SOW-0121 - File-Backed Journalctl Full Parity And Ship Decision: completed
-  after strict P0/P1/P2 reviewer-gate repair. Rust and Go portable
-  `journalctl` now recognize the full official systemd v260.1 option/action
-  surface, preserve required file-backed parity for the repaired timestamp,
-  cursor, directory, reverse, merge, invocation, and rotate-vacuum cases, and
-  reject daemon/host-only behavior with portable unsupported messages. Local
-  validation passed parser parity, stock-oracle interoperability, Rust and Go
-  tests, full Rust workspace tests, full Go tests, and whitespace checks. The
-  final requested reviewer gate returned valid `P0/P1/P2 FINDINGS: NO` reports
-  from glm, minimax, kimi, mimo, deepseek, and qwen; only P3 cosmetic or
-  optional-hardening observations remain.
 - SOW-0094 - Rust Explorer Lazy Compressed Field Inference Experiment: closed
   without implementation by user decision on 2026-06-21. The optimization is not
   important enough to keep in the active backlog. No SDK behavior, source,

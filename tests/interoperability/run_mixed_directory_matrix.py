@@ -545,20 +545,31 @@ def run_fields_check(reader: ReaderSpec, tools: dict[str, str], directory: Path)
     return record
 
 
-def run_boots_check(reader: ReaderSpec, tools: dict[str, str], directory: Path, expected_count: int) -> dict:
+def boot_rows(stdout: str) -> list[str]:
+    rows = [line.strip() for line in stdout.splitlines() if line.strip()]
+    return [row for row in rows if not row.startswith("IDX BOOT ID")]
+
+
+def run_boots_check(
+    reader: ReaderSpec,
+    tools: dict[str, str],
+    directory: Path,
+    expected_rows: list[str],
+) -> dict:
     cmd = reader_command(reader, tools, "boots", directory, [])
     result = run(cmd)
     record = base_record(reader, "list-boots", cmd)
     if result.returncode != 0:
         record["error"] = text_tail(result.stderr) or text_tail(result.stdout)
         return record
-    lines = [line for line in result.stdout.splitlines() if line.strip()]
-    record["entries_read"] = len(lines)
-    record["expected"] = expected_count
-    if len(lines) == expected_count:
+    rows = boot_rows(result.stdout)
+    record["entries_read"] = len(rows)
+    record["expected"] = expected_rows
+    record["actual"] = rows
+    if rows == expected_rows:
         record["status"] = "PASS"
     else:
-        record["error"] = f"boot count mismatch: got {len(lines)}, expected {expected_count}"
+        record["error"] = f"boot rows mismatch: got {rows}, expected {expected_rows}"
     return record
 
 
@@ -632,6 +643,7 @@ def stock_reader_checks(
     tools: dict[str, str],
     fixtures: dict[str, Path],
     stock_sequence: list[str],
+    expected_boot_rows: list[str],
 ) -> list[dict]:
     return [
         run_json_check(reader, tools, fixtures["stock"], "json-all", STOCK_SPECS, [], stock_sequence),
@@ -665,7 +677,7 @@ def stock_reader_checks(
         run_export_check(reader, tools, fixtures["stock"], STOCK_SPECS),
         run_text_check(reader, tools, fixtures["stock"], STOCK_SPECS),
         run_fields_check(reader, tools, fixtures["stock"]),
-        run_boots_check(reader, tools, fixtures["stock"], len(STOCK_SPECS)),
+        run_boots_check(reader, tools, fixtures["stock"], expected_boot_rows),
         run_verify_check(reader, tools, fixtures["unsealed"], "verify-unsealed-without-key", [], True),
         run_verify_check(reader, tools, fixtures["stock"], "verify-sealed-without-key-fails", [], False),
         run_verify_check(reader, tools, fixtures["stock"], "verify-sealed-with-key", ["--verify-key", VERIFY_KEY], True),
@@ -694,8 +706,9 @@ def reader_checks(
     fixtures: dict[str, Path],
     stock_sequence: list[str],
     zst_sequence: list[str],
+    expected_boot_rows: list[str],
 ) -> list[dict]:
-    checks = stock_reader_checks(reader, tools, fixtures, stock_sequence)
+    checks = stock_reader_checks(reader, tools, fixtures, stock_sequence, expected_boot_rows)
     checks.extend(zst_reader_checks(reader, tools, fixtures, zst_sequence))
     for check in checks:
         print(f"{reader.name} {check['test']}: {check['status']}", flush=True)
@@ -768,9 +781,26 @@ def main() -> int:
     all_checks: list[dict] = []
     stock_sequence = expected_sequence(STOCK_SPECS)
     zst_sequence = expected_sequence(ZST_SPECS)
+    stock_boots = run(reader_command(READERS["stock"], tools, "boots", fixtures["stock"], []))
+    require_ok(stock_boots, "stock list-boots oracle")
+    expected_boot_rows = boot_rows(stock_boots.stdout)
+    if len(expected_boot_rows) != len(STOCK_SPECS):
+        raise RuntimeError(
+            "stock list-boots oracle did not read every stock fixture: "
+            f"got {len(expected_boot_rows)}, expected {len(STOCK_SPECS)}"
+        )
 
     for reader in readers:
-        all_checks.extend(reader_checks(reader, tools, fixtures, stock_sequence, zst_sequence))
+        all_checks.extend(
+            reader_checks(
+                reader,
+                tools,
+                fixtures,
+                stock_sequence,
+                zst_sequence,
+                expected_boot_rows,
+            )
+        )
     payload = matrix_payload(readers, stock_sequence, zst_sequence, all_checks)
     result_path = write_payload(payload)
     print_summary(payload, result_path)

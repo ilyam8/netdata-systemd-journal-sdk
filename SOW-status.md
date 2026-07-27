@@ -7,10 +7,8 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Current
 
-- `SOW-0141-20260727-v0-8-0-dependency-refresh.md` - in progress after the
-  completed SOW-0115 regression repair restored Rust directory
-  interoperability. Aligns compiler minimums, refreshes dependencies, and
-  validates the complete `0.8.0` candidate before publication.
+- `SOW-0141-20260727-v0-8-0-dependency-refresh.md` - in progress again after
+  both pre-existing validation regressions were repaired.
 
 ## Pending
 
@@ -38,6 +36,11 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0121-20260621-file-backed-journalctl-full-parity.md` - completed again
+  after replacing the mixed-directory count-only boot assertion with complete
+  normalized stock-oracle row comparison and an oracle-completeness check.
+  Full-feature mixed validation passed 42/42; tagged-v260.1 directory and query
+  validation passed.
 - `SOW-0115-20260616-portable-writer-identity-helpers.md` - completed after a
   2026-07-27 regression repair supplied deterministic synthetic identity to
   two missed internal Rust executable paths; all affected directory,

@@ -6,11 +6,8 @@ Status: completed
 
 `completed` is the successful terminal status. `done` is a directory name, not a status value. Do not use `Status: done` or `Status: complete`.
 
-Sub-state: completed on 2026-06-21 after the user-requested strict P0/P1/P2
-review gate. Six requested read-only reviewers reported no P0, P1, or P2
-findings; only P3 cosmetic or optional-hardening observations remain. This SOW
-is release-relevant for any non-Linux package that claims an official portable
-`journalctl` command.
+Sub-state: the 2026-07-27 mixed-directory harness regression is repaired and
+validated. Rust and Go behavior did not change.
 
 ## Requirements
 
@@ -1819,7 +1816,7 @@ Final follow-up mapping:
 
 ## Regression - 2026-06-21 P0/P1/P2 Review Gate
 
-Status: in-progress.
+Status: completed.
 
 Trigger:
 
@@ -2152,3 +2149,82 @@ Final validation gate after strict reviewer closure - 2026-06-21:
   - Rejected: P3-only vacuum hardening, SDK extension alias cleanup, and
     cosmetic error text differences are not required for this SOW acceptance
     gate.
+
+## Regression - 2026-07-27 Mixed-Directory Boot-Row Oracle
+
+Status: in-progress.
+
+### What Broke
+
+`tests/interoperability/run_mixed_directory_matrix.py::run_boots_check()` counts
+every non-empty output line. Stock is invoked with `--quiet` and emits eight
+boot rows. The Go and Rust rewrites are invoked without `--quiet`; both
+correctly emit the stock-compatible `IDX BOOT ID ...` header followed by the
+same eight rows. The harness therefore reports two false failures:
+
+```text
+FAIL: go list-boots: boot count mismatch: got 9, expected 8
+FAIL: rust list-boots: boot count mismatch: got 9, expected 8
+```
+
+The sibling `run_directory_matrix.py` already normalizes this exact header and
+compares the complete normalized rows against stock output. The mixed harness
+was missed when SOW-0121 added stock-compatible action headers.
+
+### User Decision And Repair Plan
+
+The user selected option 1B, the long-term-best validation repair:
+
+1. Normalize the exact `IDX BOOT ID` header for all readers.
+2. Obtain expected normalized rows from stock systemd once.
+3. Compare every reader's complete normalized boot rows, including index, boot
+   ID, first timestamp, last timestamp, order, and row count.
+4. Do not change Go/Rust journalctl behavior, SDK APIs, or production defaults.
+5. Run the complete mixed-directory matrix, the sibling directory matrix, the
+   journalctl query matrix, focused Rust/Go journalctl tests, Python syntax,
+   whitespace, same-pattern search, and SOW audit.
+
+### Artifact Impact
+
+- `AGENTS.md`, project skills, specs, user docs, and operator skills: no update
+  needed because this is test-oracle normalization only.
+- SOW lifecycle: originating SOW-0121 returned to completed; SOW-0141 resumed
+  after the repair.
+- Sensitive data: synthetic fixture IDs and public command output only.
+
+### Repair And Evidence
+
+- Added the same exact table-header normalization already used by the sibling
+  directory matrix.
+- Replaced the weak row-count assertion with exact normalized stock-oracle row
+  comparison. Index, boot ID, first timestamp, last timestamp, ordering, and
+  row count must all agree.
+- Added an oracle-completeness precondition so a stock binary missing support
+  for one of the generated fixture formats cannot produce false SDK failures.
+- Same-pattern search found no other count-only `--list-boots` comparison:
+  `run_directory_matrix.py` already compares exact normalized rows, and the
+  query matrix compares complete stock and SDK command output.
+
+Validation:
+
+- `python3 -m py_compile
+  tests/interoperability/run_mixed_directory_matrix.py`: passed.
+- Full-feature systemd `255 (255.4-1ubuntu8.16)` mixed-directory matrix:
+  42/42 passed across stock, Go, and Rust, including exact eight-row boot
+  output and sealed/XZ fixtures.
+- Tagged systemd `260 (260.1)` directory matrix: passed.
+- Tagged systemd `260 (260.1)` journalctl query matrix: passed with
+  `failures: []`, including the list-boots cases.
+- The repository-local tagged v260.1 binary is not a valid full mixed-format
+  oracle: its version features report `-XZ -GCRYPT`, so it omits the XZ boot
+  and reports that it was compiled without FSS. The new completeness
+  precondition identifies this as an oracle limitation rather than attributing
+  false failures to Go or Rust.
+- Exact Go `1.26.2` `go test ./cmd/journalctl`: passed.
+- Exact Rust `1.91` `cargo test --manifest-path rust/Cargo.toml -p journalctl
+  --locked`: passed.
+- `git diff --check`: passed.
+- `.agents/sow/audit.sh`: passed.
+
+No Rust or Go production source, API, behavior, file format, durability,
+default, or compatibility contract changed.
