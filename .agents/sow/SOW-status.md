@@ -1,13 +1,10 @@
 # SOW Status
 
-Last updated: 2026-07-26
+Last updated: 2026-07-27
 
 ## Current
 
-- SOW-0140 - v0.7.9 Release Readiness: in progress. Repairs the non-hermetic
-  Rust CLI coverage tests, restores meaningful active-surface static-analysis
-  gates, prepares Rust/Go `0.7.9` metadata and package evidence, and stops
-  before registry publication or immutable release tags.
+- None.
 
 ## Pending
 
@@ -52,6 +49,12 @@ Last updated: 2026-07-26
 
 ## Recently Closed Or Completed
 
+- SOW-0140 - v0.7.9 Rust Crates Release: completed. Release-prep commit
+  `453148e512b7312f3f1481a5d82a1ed58950e370` is pushed, all required GitHub
+  workflows are green, and all eight Rust `0.7.9` crates passed sequential
+  dry-runs, publication, and registry verification. Rust and Go writer
+  optimizations remain byte/file-format compatible; no Git or Go module tag
+  was created.
 - SOW-0139 - Go Live Journalctl Boot-Selector Compatibility: completed.
   Stock follow invocations now combine explicit `--boot=all` with `--merge`
   across the low-level live harness and all equivalent query-matrix cases.

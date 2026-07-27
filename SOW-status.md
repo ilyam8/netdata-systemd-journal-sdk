@@ -1,15 +1,13 @@
 # SOW Status
 
-Last updated: 2026-07-26
+Last updated: 2026-07-27
 
 This root file is a short convenience index. The canonical detailed SOW ledger
 is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Current
 
-- `SOW-0140-20260726-v0-7-9-release-readiness.md` - in progress. Repairs release
-  test/static-analysis gates and prepares validated Rust/Go `0.7.9` source,
-  metadata, and package evidence without publishing or creating release tags.
+- None.
 
 ## Pending
 
@@ -40,6 +38,10 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0140-20260726-v0-7-9-release-readiness.md` - completed. Pushed release
+  commit `453148e512b7312f3f1481a5d82a1ed58950e370`, passed all required GitHub
+  workflows, and published and registry-verified all eight Rust `0.7.9`
+  crates. No Git or Go module tag was created.
 - `SOW-0139-20260726-go-live-journalctl-boot-selector-compatibility.md` -
   completed. Repairs every equivalent stock follow invocation using explicit
   `--boot=all`; the complete Go suite and 21/21 stock/Go/Rust follow

@@ -2,11 +2,11 @@
 
 ## Status
 
-Status: in-progress
+Status: completed
 
-Sub-state: implementation, local validation, and authorized external review are
-complete; source commit/push, authoritative GitHub Coverage/Codacy/CodeQL
-closeout, and authorized Rust crates.io publication remain.
+Sub-state: release-prep commit `453148e512b7312f3f1481a5d82a1ed58950e370`
+is pushed, required CI is green, and all eight Rust `0.7.9` crates are
+published and verified on crates.io. No Git or Go module tag was created.
 
 ## Requirements
 
@@ -412,6 +412,33 @@ Failure handling:
 - Because Git tags and a Go module release were not authorized, retained Go
   install examples at the current `v0.7.8` tag while Rust examples identify
   the crates.io-bound `0.7.9` release.
+- Committed the complete release-prep change as
+  `453148e512b7312f3f1481a5d82a1ed58950e370` and pushed `master`.
+- Required GitHub workflows all completed successfully:
+  - Coverage `30226624050`;
+  - Codacy SARIF `30226624057`;
+  - CodeQL `30226624051`;
+  - Verify Doc Examples `30226624046`;
+  - Publish Wiki `30226624048`;
+  - Code Quality push analysis `30226623693`.
+- CodeQL still reported two Rust macro-expansion false positives at the
+  explicit positional-argument sites. Alerts 3658 and 3604 were dismissed as
+  false positives with the compiler-validated commit evidence; the Go
+  unsigned-conversion alert closed after the source repair.
+- Published and registry-verified Rust `0.7.9` packages in dependency order:
+  `systemd-journal-sdk-common`, `systemd-journal-sdk-registry`,
+  `systemd-journal-sdk-core`, `systemd-journal-sdk-host`,
+  `systemd-journal-sdk-log-writer`, `systemd-journal-sdk-index`,
+  `systemd-journal-sdk-engine`, and `systemd-journal-sdk`.
+- Every package passed a final `cargo publish --dry-run --locked` immediately
+  before upload, and `cargo info <package>@0.7.9` verified all eight published
+  versions.
+- The engine package emitted Cargo's existing warning that locked transitive
+  `spin 0.9.8` is yanked. Verification and publication succeeded; no dependency
+  source or constraint changed in this release.
+- SOW closeout is a separate commit because authoritative GitHub CI and
+  crates.io publication evidence could only exist after the release-prep
+  commit was pushed.
 
 ## Validation
 
@@ -482,6 +509,12 @@ Tests or equivalent validation:
   Python syntax checks, `git diff --check`, and the project SOW audit passed.
 - Post-review wiki validation passed all 15 pages, and the docs harness passed
   all 77 tests.
+- Pushed GitHub CI passed Coverage, Codacy SARIF, CodeQL, verified examples,
+  wiki validation/publication, and push code-quality workflows for
+  `453148e512b7312f3f1481a5d82a1ed58950e370`.
+- Final dependency-ordered dry-runs passed for all eight publishable Rust
+  packages, all eight uploads succeeded, and registry `cargo info` verification
+  returned version `0.7.9` for every package.
 - Local Rust LCOV generation remains unavailable because `cargo-llvm-cov` is
   not installed. No installation was performed; pushed Coverage CI is the
   authoritative coverage closeout.
@@ -577,8 +610,8 @@ Artifact maintenance gate:
   examples under published `docs/**` now show `0.7.9`; Go examples remain at
   the current `v0.7.8` module tag because no Go release is authorized.
 - End-user/operator skills: no copied/output skill is affected.
-- SOW lifecycle: in-progress in `.agents/sow/current/`.
-- SOW-status.md: activation updates included in both ledgers.
+- SOW lifecycle: completed and moved to `.agents/sow/done/`.
+- SOW-status.md: completion updates included in both ledgers.
 
 Specs update:
 
@@ -618,22 +651,40 @@ Follow-up mapping:
 
 - SOW-0136 already tracks the Rust directory harness's explicit synthetic
   identity repair; it is not broadened into this release SOW.
-- Rust crates.io publication is covered by Decision 7 after commit/push and
-  green CI. Immutable tags and a Go module release remain separate follow-ups.
+- The legacy signed `journal.BootInfo` timestamp range is explicitly rejected
+  as not worth a source-breaking patch change: overflow requires on-disk
+  realtime values beyond year 294247, while live Go CLI paths retain `uint64`
+  and are fixed.
+- Updating the existing yanked transitive `spin 0.9.8` lock entry is explicitly
+  rejected for this patch because it is unrelated dependency churn, every
+  package verified, and no direct dependency constraint changed.
+- No `v0.7.9` or `go/v0.7.9` tag follow-up is scheduled. The user required
+  crates.io availability for Netdata; Rust packages are published, and Go
+  documentation accurately remains at the existing `v0.7.8` module release.
 
 ## Outcome
 
-Pending.
+Rust `0.7.9` is published on crates.io and ready for downstream Netdata
+integration. The release contains the validated Rust writer entry-link state
+reuse, the Rust CLI coverage repair, release-gate hygiene, and coordinated
+internal package versions. All required CI and registry verification passed.
+No immutable Git or Go module tag was created.
 
 ## Lessons Extracted
 
-Pending.
+- Release version sweeps must cover active specs as well as published docs and
+  READMEs.
+- CodeQL's Rust unused-variable query can remain a false positive when a
+  parameter is visibly passed as an explicit positional macro argument;
+  compiler validation plus alert disposition is the correct closeout.
+- Coordinated Rust workspace publication must remain strictly sequential
+  because each dependent package dry-run resolves the newly published
+  predecessor from crates.io.
 
 ## Followup
 
-Rust crates.io publication is authorized after the release-prep commit is
-pushed and required CI is green. Immutable Git tag creation and the Go module
-release remain gated on separate explicit user approval.
+SOW-0136 remains the tracked test-harness follow-up. No release-tag or Go module
+follow-up is scheduled by this Rust-only crates.io release.
 
 ## Regression Log
 
