@@ -18,7 +18,7 @@ alias it as `journal` in Cargo dependencies to keep the existing
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.7.4" }
+journal = { package = "systemd-journal-sdk", version = "0.7.9" }
 ```
 
 The Rust workspace also publishes lower-level project-prefixed packages for

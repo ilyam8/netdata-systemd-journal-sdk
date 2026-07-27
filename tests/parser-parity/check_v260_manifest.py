@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 

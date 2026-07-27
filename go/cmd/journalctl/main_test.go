@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/netdata/systemd-journal-sdk/go/journal"
 )
@@ -68,6 +69,36 @@ func TestShowTailLimitZeroDoesNotScan(t *testing.T) {
 	if j.seekHeadCalls != 0 || j.seekTailCalls != 0 || j.nextCalls != 0 || j.previousCalls != 0 || j.getEntryCalls != 0 {
 		t.Fatalf("showTail limit=0 scanned journal: seekHead=%d seekTail=%d next=%d previous=%d getEntry=%d",
 			j.seekHeadCalls, j.seekTailCalls, j.nextCalls, j.previousCalls, j.getEntryCalls)
+	}
+}
+
+func TestFormatTimestampPreservesFullUint64SourceRealtime(t *testing.T) {
+	entry := &journal.Entry{
+		Fields: map[string][]byte{
+			"_SOURCE_REALTIME_TIMESTAMP": []byte("18446744073709551615"),
+		},
+	}
+	renderer := newOutputRenderer(outputOptions{utc: true})
+
+	got, err := renderer.formatTimestamp(entry, timestampShortISOPrecise)
+	if err != nil {
+		t.Fatalf("formatTimestamp error: %v", err)
+	}
+	if want := "586524-01-19T08:01:49.551615+00:00"; got != want {
+		t.Fatalf("formatTimestamp = %q, want %q", got, want)
+	}
+}
+
+func TestFormatHeaderTimestampPreservesFullUint64(t *testing.T) {
+	const maxUint64 = ^uint64(0)
+
+	got := formatHeaderTimestamp(maxUint64)
+	want := time.Unix(
+		int64(maxUint64/1_000_000),
+		int64(maxUint64%1_000_000)*1_000,
+	).Local().Format("Mon 2006-01-02 15:04:05 MST")
+	if got != want {
+		t.Fatalf("formatHeaderTimestamp = %q, want %q", got, want)
 	}
 }
 

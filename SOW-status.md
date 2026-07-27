@@ -7,7 +7,9 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Current
 
-- None.
+- `SOW-0140-20260726-v0-7-9-release-readiness.md` - in progress. Repairs release
+  test/static-analysis gates and prepares validated Rust/Go `0.7.9` source,
+  metadata, and package evidence without publishing or creating release tags.
 
 ## Pending
 
@@ -35,6 +37,7 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 - `SOW-0050-20260528-netdata-vendored-journal-removal.md` - open. Remove old Netdata vendored journal code only after all Netdata component integrations are complete and fresh searches prove no production references remain.
 - `SOW-0097-20260607-go-codacy-metric-debt-refactor.md` - open. Follow-up from the Codacy Rust/Go metrics audit for Go production file-size/ownership and duplication reduction.
 - `SOW-0098-20260607-rust-legacy-core-duplication-debt.md` - open. Follow-up from the Codacy Rust/Go metrics audit for real Rust `jf`/`journal-core` duplication reduction.
+
 ## Done
 
 - `SOW-0139-20260726-go-live-journalctl-boot-selector-compatibility.md` -

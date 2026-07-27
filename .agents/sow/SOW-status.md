@@ -4,7 +4,10 @@ Last updated: 2026-07-26
 
 ## Current
 
-- None.
+- SOW-0140 - v0.7.9 Release Readiness: in progress. Repairs the non-hermetic
+  Rust CLI coverage tests, restores meaningful active-surface static-analysis
+  gates, prepares Rust/Go `0.7.9` metadata and package evidence, and stops
+  before registry publication or immutable release tags.
 
 ## Pending
 
@@ -46,6 +49,7 @@ Last updated: 2026-07-26
   decision on 2026-06-25. Preserves the requested string/numeric operator
   support matrix, current exact-positive filter gap analysis, and open semantic
   decisions. Not executable until the user explicitly resumes it.
+
 ## Recently Closed Or Completed
 
 - SOW-0139 - Go Live Journalctl Boot-Selector Compatibility: completed.

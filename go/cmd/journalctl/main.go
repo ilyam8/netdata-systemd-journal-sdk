@@ -3886,7 +3886,10 @@ func formatHeaderTimestamp(usec uint64) string {
 	if usec == 0 {
 		return "n/a"
 	}
-	return time.Unix(0, int64(usec)*1000).Local().Format("Mon 2006-01-02 15:04:05 MST")
+	return time.Unix(
+		int64(usec/1_000_000),
+		int64(usec%1_000_000)*1_000,
+	).Local().Format("Mon 2006-01-02 15:04:05 MST")
 }
 
 func formatHeaderTimespan(usec uint64) string {

@@ -259,7 +259,10 @@ func (r *outputRenderer) formatTimestamp(entry *journal.Entry, mode timestampMod
 	if mode == timestampShortUnix {
 		return fmt.Sprintf("%d.%06d", realtime/1_000_000, realtime%1_000_000), nil
 	}
-	t := time.UnixMicro(int64(realtime))
+	t := time.Unix(
+		int64(realtime/1_000_000),
+		int64(realtime%1_000_000)*1_000,
+	)
 	if r.options.utc {
 		t = t.UTC()
 	} else {

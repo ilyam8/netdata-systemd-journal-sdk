@@ -46,49 +46,65 @@ Use this skill when:
 
 ## Workflow
 
-1. Confirm the release version, for example `v0.2.0`.
-2. Verify the worktree is clean:
+1. Confirm the intended Rust crate and Go module versions. They are normally
+   the same, for example `0.2.0`, but may differ when a SOW records a
+   Rust-only or Go-only release.
+2. Update and verify every active consumer install example for the intended
+   version. Scan the active documentation and specification roots
+   dynamically; do not limit the scan to a fixed file list or only the
+   immediately previous version:
+
+   ```bash
+   grep -RInE \
+     'systemd-journal-sdk.*version = "[0-9]+\.[0-9]+\.[0-9]+"|systemd-journal-sdk/go@v[0-9]+\.[0-9]+\.[0-9]+' \
+     --include='*.md' --include='*.toml' \
+     README.md rust/README.md docs .agents/sow/specs
+   ```
+
+   Verify every returned Rust example identifies the intended Rust crate
+   version and every Go example identifies the intended Go module version.
+3. Verify the worktree is clean:
 
    ```bash
    git status --short --branch
    ```
 
-3. Verify the Go module path:
+4. Verify the Go module path:
 
    ```bash
    sed -n '1,20p' go/go.mod
    ```
 
-4. Check local and remote tags before creating anything:
+5. Check local and remote tags before creating anything:
 
    ```bash
    git tag -l 'v0.2.0' 'go/v0.2.0'
    git ls-remote --tags origin refs/tags/v0.2.0 refs/tags/v0.2.0^{} refs/tags/go/v0.2.0 refs/tags/go/v0.2.0^{}
    ```
 
-5. If either tag exists at a different commit, stop and ask the user. Do not
+6. If either tag exists at a different commit, stop and ask the user. Do not
    move, delete, force-push, or recreate tags without explicit approval.
-6. Create annotated tags on the intended commit:
+7. Create annotated tags on the intended commit:
 
    ```bash
    git tag -a v0.2.0 <commit> -m 'v0.2.0'
    git tag -a go/v0.2.0 <commit> -m 'go/v0.2.0'
    ```
 
-7. Push the branch first, then push both tags:
+8. Push the branch first, then push both tags:
 
    ```bash
    git push origin <branch>
    git push origin v0.2.0 go/v0.2.0
    ```
 
-8. Verify remote tag targets:
+9. Verify remote tag targets:
 
    ```bash
    git ls-remote --tags origin refs/tags/v0.2.0 refs/tags/v0.2.0^{} refs/tags/go/v0.2.0 refs/tags/go/v0.2.0^{}
    ```
 
-9. Report the peeled tag commit hashes to the user.
+10. Report the peeled tag commit hashes to the user.
 
 ## Rust crates.io Workflow
 
@@ -129,10 +145,13 @@ Before publishing Rust crates:
 
 ## Validation Checklist
 
-- Root tag exists locally and remotely.
-- Go submodule tag exists locally and remotely.
-- Both peeled tag targets are the same commit.
+- Root tag exists locally and remotely when the release includes a root tag.
+- Go submodule tag exists locally and remotely when the release includes a Go
+  module tag.
+- Both peeled tag targets are the same commit when both tags are included.
 - The branch containing that commit is pushed.
+- Every active consumer install example identifies the intended Rust crate or
+  Go module version.
 - `git status --short --branch` is clean after release work.
 - Rust crates.io dry-runs pass for all publishable Rust packages when Rust
   packages are part of the release.

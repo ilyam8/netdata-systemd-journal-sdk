@@ -53,7 +53,7 @@ class WriterCoreRunnerTests(unittest.TestCase):
         command = writer_bench.bench_command(
             ["writer_core_bench"],
             language="rust",
-            output=Path("/tmp/output.journal"),
+            output=Path(".local/test-output.journal"),
             rows=256,
             journal_format="compact",
             final_state="online",
@@ -73,7 +73,7 @@ class WriterCoreRunnerTests(unittest.TestCase):
         command = writer_bench.bench_command(
             ["go-writer-core-bench"],
             language="go",
-            output=Path("/tmp/output.journal"),
+            output=Path(".local/test-output.journal"),
             rows=256,
             journal_format="compact",
             final_state="online",

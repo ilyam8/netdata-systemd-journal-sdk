@@ -87,7 +87,7 @@ fn read_machine_id_candidate(path: &Path, source: &str) -> io::Result<(Uuid, Str
             if err.kind() == io::ErrorKind::NotFound {
                 err
             } else {
-                io::Error::new(err.kind(), format!("failed to read {source}: {err}"))
+                io::Error::new(err.kind(), format!("failed to read {}: {}", source, err))
             }
         })
 }
@@ -137,11 +137,11 @@ fn read_boot_id_candidate(path: &Path, source: &str) -> io::Result<Uuid> {
         if err.kind() == io::ErrorKind::NotFound {
             err
         } else {
-            io::Error::new(err.kind(), format!("failed to read {source}: {err}"))
+            io::Error::new(err.kind(), format!("failed to read {}: {}", source, err))
         }
     })?;
     parse_uuid_text(&text)
-        .map_err(|err| io::Error::new(err.kind(), format!("failed to read {source}: {err}")))
+        .map_err(|err| io::Error::new(err.kind(), format!("failed to read {}: {}", source, err)))
 }
 
 #[cfg(test)]

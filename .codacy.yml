@@ -1,3 +1,5 @@
 ---
 exclude_paths:
+  - ".agents/sow/done/**"
+  - "experiments/**"
   - "rust/Cargo.lock"
