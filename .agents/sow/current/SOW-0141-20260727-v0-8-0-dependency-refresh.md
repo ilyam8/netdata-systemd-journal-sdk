@@ -5,8 +5,8 @@
 Status: in-progress
 
 Sub-state: local implementation, validation, and external-review disposition
-complete. Awaiting the final release checkpoint; current GitHub code-scanning
-and Codacy results remain a mandatory post-push, pre-tag/publication gate.
+complete. The post-push GitHub code-scanning and Codacy gates are
+dispositioned. Awaiting the final release checkpoint.
 
 ## Requirements
 
@@ -362,6 +362,36 @@ Open decisions:
    - Treat this as part of the accepted pre-1.0 Foyer migration for `0.8.0`,
      document the exact `0.22` coupling for direct engine consumers, and do
      not add a new Foyer re-export or wrapper API during release preparation.
+9. **Retired Python and Node CodeQL findings: exclusion retained
+   (long-term-best).**
+   - The repository CodeQL workflow has analyzed only Go and Rust since the
+     Python and Node product targets were retired at `f77975e`.
+   - Preserve the retired implementations under `experiments/` and preserve
+     Python interoperability, conformance, documentation, and release tooling.
+     Deleting either class would not remove Python or JavaScript from the
+     repository and would discard useful validation infrastructure.
+   - Dismiss the 34 stale alerts from the last pre-retirement Python/JavaScript
+     analysis as `won't fix`. Every alert points to a now-absent `python/` or
+     `node/` path at `a2361aba1952`, predates retirement, and is outside the
+     active Go/Rust product scope.
+   - GitHub's separate dynamic Code Quality product still auto-detects Go,
+     Python, and JavaScript. It has no documented per-language exclusion;
+     disabling that repository-level product is the only supported way to stop
+     those redundant dynamic scans while retaining the repository's explicit
+     Go/Rust CodeQL workflow.
+10. **Netdata controls SDK compiler minimums (long-term-best).**
+    - The SDK's declared Go and Rust minimums must follow Netdata's
+      corresponding consuming-module declarations and must never exceed them.
+    - A newer compiler used by Netdata packaging, CI, local validation, or a
+      vulnerability scanner does not authorize raising the SDK minimum above
+      Netdata's declared minimum.
+    - Dependency refreshes must select versions compatible with those Netdata
+      floors. Scanner findings against the floor are investigated and
+      dispositioned; they are not resolved by making the SDK incompatible with
+      Netdata.
+    - For this release, retain Go `1.26.2` because
+      `netdata/netdata` declares `go 1.26.2`, while continuing to validate the
+      real Netdata packaging build with Go `1.26.5`.
 
 ## Plan
 
@@ -674,6 +704,45 @@ Reviewer findings:
 - No verified P0/P1/P2 source or release-record finding remains. Codex and
   MiniMax are explicitly recorded coverage gaps rather than invented verdicts.
 
+Post-push code-scanning disposition:
+
+- The repository CodeQL workflow completed successfully for Go and Rust at
+  `e40e7be750a0fd7b9900d66a304a12620fc9a91e`.
+- GitHub Dependabot reports zero open alerts.
+- GitHub CodeQL initially reported 34 open findings, all produced by the former
+  Python/JavaScript jobs on 2026-06-13 or 2026-06-14 at
+  `a2361aba1952`. All 34 locations use the retired root `python/` or `node/`
+  paths; none exists at the release candidate.
+- Alert composition was one high-security-severity JavaScript temporary-file
+  warning, two Python error-level uninitialized-variable quality findings, and
+  31 note-level quality findings. Their severity does not change the scope
+  disposition: the analyzed product paths were moved out of product scope, the
+  current workflow no longer analyzes those languages, and the alerts cannot
+  describe the current Go/Rust candidate.
+- Removing the archived implementations would not clear these historical alert
+  records, because every reported path is already absent. Python also remains
+  required for 60 tracked test/release/tooling scripts, while one JavaScript
+  Codacy-export helper remains outside the archived implementation.
+- The user selected exclusion rather than remediation of retired
+  implementations and authorized removal only if exclusion were impossible.
+  Exclusion is already implemented in `.github/workflows/codeql.yml`; no source
+  deletion is warranted. The stale alert records are therefore dismissed with
+  an explicit retired-target explanation. A fresh API query reports zero open
+  code-scanning alerts.
+- The post-push Codacy Analysis CLI run reports zero static-analysis issues
+  across the configured source tools. Codacy Cloud still reports 41 rows:
+  28 pre-existing complexity/static-analysis rows and 13 Trivy rows against
+  `go/go.mod` at the current release-candidate commit.
+- All 13 current-head Trivy rows interpret the `go 1.26.2` minimum directive as
+  the selected standard library. They cover eight High and five Warning
+  advisories fixed across Go `1.26.3` through `1.26.5`. Exact Go `1.26.5`
+  `govulncheck ./...` reports no reachable vulnerabilities, and Netdata's
+  packaging script builds with Go `1.26.5`. The SDK retains `1.26.2` because
+  Netdata's consuming Go module declares that minimum. The user explicitly
+  rejected raising SDK compiler requirements above Netdata's declarations;
+  these Trivy rows are accepted scanner-floor findings and do not block the
+  release.
+
 Same-failure scan:
 
 - Active docs/specs/manifests contain no stale `0.7.8` or `0.7.9` consumer
@@ -756,9 +825,10 @@ The local `0.8.0` dependency-refresh candidate is implemented and validated.
 All correctness, compatibility, integration, documentation, packaging-list,
 and performance gates pass. The only blocked dry-run is the expected crates.io
 dependency order after the common crate. External-review findings are
-dispositioned with the documented Codex/MiniMax coverage gaps. The user's
-explicit immutable-release checkpoint and post-push remote scanning remain
-outstanding.
+dispositioned with the documented Codex/MiniMax coverage gaps. GitHub code
+scanning has zero open alerts after the retired-target disposition. The Codacy
+Go-floor findings are explicitly accepted under the Netdata-controlled
+toolchain policy. Only the user's explicit immutable-release checkpoint remains.
 
 ## Lessons Extracted
 

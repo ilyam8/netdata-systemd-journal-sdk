@@ -448,6 +448,23 @@ Output/reference skills:
 ### Project-specific overrides
 
 - The baseline systemd compatibility target is `systemd/systemd` tag `v260.1`.
+- Netdata's consuming-module declarations are the authority for SDK compiler
+  minimums. The SDK's Go and Rust minimums may match or remain below Netdata's
+  corresponding declared minimums, but must never exceed them. Requiring a
+  newer compiler would make the SDK incompatible with Netdata.
+- Inspect the current Netdata source before setting or changing a compiler
+  minimum. Use the consuming Go module's `go` directive and the consuming Rust
+  workspace's `rust-version`; do not substitute a newer compiler downloaded by
+  packaging, selected by CI, available locally, or preferred by a scanner.
+- Never propose raising an SDK compiler minimum above Netdata's declaration as
+  a dependency-refresh, release-hygiene, vulnerability-remediation, or
+  scanner-cleanup option. Select dependency versions compatible with the
+  Netdata floor instead. Newer toolchains may be used as additional validation
+  targets, but they do not change release metadata or the supported minimum.
+- If a scanner reports findings against Netdata's compiler floor, investigate
+  reachability and validate the actual Netdata build toolchain, then record an
+  explicit scanner disposition. Do not clear the finding by breaking Netdata
+  compatibility.
 - The final writer target includes compression and Forward Secure Sealing where systemd journal files define it, but implementation may be phased.
 - Readers must handle applicable historical journal file variants covered by the shared conformance fixtures.
 - Provide two API layers per language: idiomatic SDK API plus a libsystemd-compatible reader facade. The facade is required unless a SOW records concrete evidence that it would require native bindings, violate the pure-language policy, or create an unsafe/unrepresentable API in that language.
