@@ -11,6 +11,13 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
+const LIVE_MACHINE_ID: [u8; 16] = [
+    0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf,
+];
+const LIVE_BOOT_ID: [u8; 16] = [
+    0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf,
+];
+
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(long = "path", conflicts_with = "dir")]
@@ -104,7 +111,7 @@ fn run_directory_writer(
 
 fn directory_config(args: &Args, compression: Compression) -> Config {
     let origin = Origin {
-        machine_id: None,
+        machine_id: Some(uuid::Uuid::from_bytes(LIVE_MACHINE_ID)),
         namespace: None,
         source: Source::System,
     };
@@ -113,6 +120,7 @@ fn directory_config(args: &Args, compression: Compression) -> Config {
         RotationPolicy::default(),
         RetentionPolicy::default(),
     )
+    .with_boot_id(uuid::Uuid::from_bytes(LIVE_BOOT_ID))
     .with_compression(compression)
     .with_compression_threshold(args.compression_threshold)
     .with_compact(args.compact)

@@ -4,7 +4,10 @@
 
 Status: completed
 
-Sub-state: completed - strict Rust/Go writer contract, optional host helper packages, docs/spec updates, validation, reviewer rounds, and follow-up mapping are complete. Completed-implementation review round 1 returned 5/6 READY TO IMPLEMENT and 1/6 NOT READY; round 2 returned 4/5 completed READY TO IMPLEMENT, 1/5 completed NOT READY, and one qwen transport failure; round 3 returned 5/5 completed READY TO IMPLEMENT and one minimax timeout whose partial transcript had no blocker and stated it would vote READY. Real findings were fixed or explicitly dispositioned and revalidated.
+Sub-state: completed after the 2026-07-27 regression repair. Two missed
+internal Rust executable call sites now supply deterministic synthetic identity
+and all affected interoperability paths pass without changing production
+writer behavior.
 
 ## Requirements
 
@@ -746,3 +749,148 @@ Completed. Rust and Go now expose strict writer behavior for the three journal a
 None yet.
 
 Append regression entries here only after this SOW was completed or closed and later testing or use found broken behavior. Use a dated `## Regression - YYYY-MM-DD` heading at the end of the file. Never prepend regression content above the original SOW narrative.
+
+## Regression - 2026-07-27
+
+Status: completed.
+
+### What Broke
+
+The production strict-identity contract remains correct, but two internal Rust
+executables retained pre-contract configuration:
+
+- `rust/src/internal/testcmd/livewriter/src/main.rs::directory_config()` passes
+  `machine_id: None` and no boot ID to `journal_log_writer::Config`.
+- `rust/src/adapter/main.rs::create_complex_match_log()` does the same.
+
+`Config::new()` now defaults to `LogIdentityMode::Strict`; its machine-ID and
+boot-ID resolvers correctly reject those missing values. The closed-file,
+binary, compression, compact, and directory-mode live interoperability runners
+all execute the shared Rust `livewriter --dir` path, so they stop before
+creating the Rust fixture.
+
+Exact Rust `1.91` plus Go `1.26.2` reproduction:
+
+```text
+RuntimeError: rust writer failed with exit 1
+stderr:
+machine ID error: machine id is required
+```
+
+A fresh build into the harness's default `rust/target` directory reproduced
+the same error, disproving the initial stale-binary hypothesis. SOW-0135 had
+already observed the compact/live subset and created pending SOW-0136, but the
+broader same-pattern scan and repair had not been activated.
+
+### Why Previous Validation Missed It
+
+The original SOW validated the writer libraries and focused writer/readback
+smokes, but did not execute every internal Rust binary path after changing the
+high-level writer default to strict identity. Workspace compilation proves
+these call sites type-check; it cannot prove that their lazy runtime
+configuration contains mandatory identity values.
+
+### User Decision And Repair Plan
+
+The user approved surgical option 1A:
+
+1. Pause SOW-0141 while this originating SOW is reopened.
+2. Give both internal executables fixed, deterministic, non-host synthetic
+   machine and boot IDs.
+3. Do not add host discovery, random identity, production API/default changes,
+   or file-format changes.
+4. Run the affected binary, adapter, directory interoperability, compact,
+   compression, and live matrices plus formatting and focused Rust tests.
+5. Search every Rust high-level writer configuration and directory-mode test
+   runner for the same missing-identity pattern.
+6. Close superseded pending SOW-0136 into this regression trail, complete this
+   regression, and resume SOW-0141.
+
+### Artifact Impact
+
+- `AGENTS.md`: no change; the regression workflow and strict identity rules
+  are already explicit.
+- Runtime project skills: no change expected; the compatibility skill already
+  requires the affected matrices.
+- Specs and end-user/operator docs: no change; production behavior is
+  unchanged.
+- SOW lifecycle: SOW-0136 is superseded without implementation because this is
+  a regression of SOW-0115, not a separate product change.
+- SOW status ledgers: update while SOW-0115 is current and when SOW-0141
+  resumes.
+
+### Implementation
+
+- `rust/src/internal/testcmd/livewriter/src/main.rs`
+  - Added fixed synthetic machine and boot UUID byte arrays matching the Go
+    interoperability fixture identity.
+  - `directory_config()` now passes both explicit values to the strict
+    high-level writer.
+- `rust/src/adapter/main.rs`
+  - `create_complex_match_log()` now passes fixed `test_uuid(5)` and
+    `test_uuid(6)` machine/boot identity.
+- No production crate, public API, writer default, host-observation path,
+  journal format, or durability behavior changed.
+
+### Regression Validation
+
+All commands used exact Rust `1.91.0` and Go `1.26.2` unless stated otherwise:
+
+- `cargo fmt --all --check`: passed.
+- Focused Rust tests for `livewriter`, `adapter`, and
+  `systemd-journal-sdk-log-writer`: 58 passed, 0 failed, including the
+  log-writer doctest.
+- Rust `1.97.1` focused `cargo check` for `livewriter` and `adapter`: passed.
+- Closed-file Rust/Go/stock matrix: 32/32 passed.
+- Binary-field matrix: 18/18 passed.
+- Zstd/xz/lz4 compression matrix: 72/72 passed.
+- Compact none/zstd/xz/lz4 matrices: 80/80 passed.
+- Complete regular/zstd/xz/lz4/compact/compact-zstd/compact-xz/compact-lz4/
+  sealed live matrix: 18/18 writer-feature cases passed. Every case had active
+  observations, complete final reads, stock libsystemd completion, structural
+  validation, and stock verification.
+- Rust conformance adapter `journal-match-boolean-logic`: passed and emitted
+  the expected two rows with the fixed synthetic boot ID.
+- Runtime-purity unit suite: 2/2 passed.
+- `git diff --check`: passed.
+- `.agents/sow/audit.sh`: passed with one current SOW, consistent lifecycle
+  state, and no sensitive-data findings.
+
+### Same-Failure Search
+
+- The only remaining Rust `machine_id: None` literals are three intentional
+  strict-rejection tests and optional parsed registry metadata; no executable
+  high-level writer configuration omits mandatory identity.
+- Every non-test Rust `Config::new()` writer call site was reviewed. The
+  internal benchmark already supplied explicit deterministic machine/boot IDs;
+  the livewriter and adapter are now repaired.
+- Every interoperability runner using Rust `livewriter --dir` goes through the
+  repaired shared configuration. Closed-file, binary, compression, compact,
+  and live coverage proves those callers execute successfully.
+
+### Review And Artifact Gates
+
+- The failure and deterministic synthetic-identity repair direction originated
+  in SOW-0135's completed external review and was preserved by SOW-0136.
+- This surgical repair changes only two internal executable configurations.
+  A separate partial external-review round was not run; the files remain in
+  the complete `0.8.0` candidate review surface required by SOW-0141 before
+  any GitHub submission.
+- Sensitive data: only fixed synthetic UUIDs are present.
+- `AGENTS.md`, runtime project skills, specs, user docs, and operator skills:
+  no update needed because no production or workflow contract changed.
+- SOW lifecycle: SOW-0136 closed as superseded, this regression is completed
+  in originating SOW-0115, and SOW-0141 resumes.
+
+### Regression Outcome
+
+Completed. Rust directory-mode interoperability and the affected conformance
+adapter path now comply with strict explicit identity. All affected compact,
+regular, compression, sealing, live, stock-systemd, Go, and Rust checks pass.
+
+### Regression Lesson
+
+Strict runtime configuration migrations require executing internal binaries,
+not only compiling them. Future strict-writer changes must include the shared
+directory-mode interoperability command and conformance adapter in the
+same-pattern scan.

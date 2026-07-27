@@ -7,16 +7,16 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Current
 
-- None.
+- `SOW-0141-20260727-v0-8-0-dependency-refresh.md` - in progress after the
+  completed SOW-0115 regression repair restored Rust directory
+  interoperability. Aligns compiler minimums, refreshes dependencies, and
+  validates the complete `0.8.0` candidate before publication.
 
 ## Pending
 
 - `SOW-0137-20260726-rust-writer-residual-array-open-performance.md` - open.
   Tracks measurement and design decisions for remaining canonical Rust writer
   global ENTRY-array and regular/fallback DATA array reopens.
-- `SOW-0136-20260726-rust-directory-harness-explicit-identity.md` - open.
-  Tracks deterministic explicit synthetic identity for Rust directory-mode
-  compact/live test harnesses without changing production writer behavior.
 - `SOW-0125-20260625-netdata-filter-operators-gap-analysis.md` - open, parked
   by user decision on 2026-06-25. Preserves string/numeric operator support
   matrix and semantic decisions; not executable until explicitly resumed.
@@ -38,6 +38,13 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0115-20260616-portable-writer-identity-helpers.md` - completed after a
+  2026-07-27 regression repair supplied deterministic synthetic identity to
+  two missed internal Rust executable paths; all affected directory,
+  conformance, compact, compression, live, and stock-systemd gates pass.
+- `SOW-0136-20260726-rust-directory-harness-explicit-identity.md` - closed
+  without implementation. Its evidence is merged into the reopened regression
+  trail of originating SOW-0115.
 - `SOW-0140-20260726-v0-7-9-release-readiness.md` - completed. Pushed release
   commit `453148e512b7312f3f1481a5d82a1ed58950e370`, passed all required GitHub
   workflows, and published and registry-verified all eight Rust `0.7.9`

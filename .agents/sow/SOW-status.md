@@ -4,17 +4,16 @@ Last updated: 2026-07-27
 
 ## Current
 
-- None.
+- SOW-0141 - v0.8.0 Dependency Refresh: in progress after the completed
+  SOW-0115 regression repair restored Rust directory-mode interoperability.
+  Aligns compiler minimums, refreshes dependencies, and runs complete
+  correctness, integration, performance, and release-candidate gates.
 
 ## Pending
 
 - SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
   follow-up analysis for remaining global ENTRY-array and regular/fallback DATA
   array reopens found during SOW-0135 review; no implementation is authorized.
-- SOW-0136 - Rust Directory Harness Explicit Identity: open. Tracks the
-  test-only repair needed for Rust compact/live directory-mode harnesses to
-  provide deterministic explicit synthetic identity without weakening the
-  production writer contract or adding host discovery.
 - SOW-0048 - Netdata OTEL Writer SDK Integration: open. Component integration
   for OTEL writer paths after inventory and writer gates.
 - SOW-0049 - Netdata Reader Plugin SDK Integration: open. Component integration
@@ -49,6 +48,9 @@ Last updated: 2026-07-27
 
 ## Recently Closed Or Completed
 
+- SOW-0136 - Rust Directory Harness Explicit Identity: closed without
+  implementation. Its evidence is merged into the user-approved regression
+  reopening of originating SOW-0115.
 - SOW-0140 - v0.7.9 Rust Crates Release: completed. Release-prep commit
   `453148e512b7312f3f1481a5d82a1ed58950e370` is pushed, all required GitHub
   workflows are green, and all eight Rust `0.7.9` crates passed sequential
@@ -219,7 +221,11 @@ Last updated: 2026-07-27
   all eight Rust packages at `0.7.3`, and read-only Netdata inspection of
   `ktsaou/netdata @ d2d17893342f` recorded the required Rust NetFlow and Go
   SNMP traps integration plan. No Netdata files were modified in this SDK SOW.
-- SOW-0115 - Portable writer identity & monotonic helpers: completed. Rust and
+- SOW-0115 - Portable writer identity & monotonic helpers: completed after the
+  2026-07-27 internal-harness regression repair. Fixed synthetic identity now
+  reaches the Rust directory livewriter and conformance adapter; affected
+  closed-file, binary, compression, compact, complete live-feature, adapter,
+  runtime-purity, and audit gates pass. Rust and
   Go now enforce a strict OS-agnostic writer contract where `_MACHINE_ID`,
   `_BOOT_ID`, and generated-entry `__MONOTONIC_TIMESTAMP` are caller-provided
   anchors, with separate optional helper packages (`go/journalhost` and

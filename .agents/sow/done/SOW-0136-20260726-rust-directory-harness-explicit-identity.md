@@ -2,10 +2,11 @@
 
 ## Status
 
-Status: open
+Status: closed
 
-Sub-state: pending activation. This SOW tracks validation-harness drift found
-while closing SOW-0135; it authorizes no implementation by itself.
+Sub-state: superseded without implementation by the user-approved 2026-07-27
+regression reopening of originating SOW-0115. Its evidence and full
+same-pattern scope are merged into that regression trail.
 
 ## Requirements
 
@@ -195,7 +196,9 @@ Pending activation.
 
 ## Outcome
 
-Pending.
+Closed without implementation. The tracked behavior is a true regression of
+SOW-0115 and is repaired and validated in the appended regression section of
+that originating SOW.
 
 ## Lessons Extracted
 
@@ -203,4 +206,4 @@ Pending activation.
 
 ## Followup
 
-Pending activation.
+No separate follow-up. Reopened SOW-0115 owns the repair and validation.

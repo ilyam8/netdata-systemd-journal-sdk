@@ -481,7 +481,7 @@ fn test_complex_match(tc: &TestCase, start: Instant) -> AdapterResult {
 fn create_complex_match_log() -> AnyResult<(tempfile::TempDir, String)> {
     let tmp = tempfile::tempdir()?;
     let origin = Origin {
-        machine_id: None,
+        machine_id: Some(test_uuid(5)),
         namespace: None,
         source: Source::System,
     };
@@ -489,7 +489,8 @@ fn create_complex_match_log() -> AnyResult<(tempfile::TempDir, String)> {
         origin,
         RotationPolicy::default(),
         RetentionPolicy::default(),
-    );
+    )
+    .with_boot_id(test_uuid(6));
     let mut log = Log::new(tmp.path(), config)?;
     write_complex_match_entries(&mut log)?;
     log.sync()?;
