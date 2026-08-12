@@ -1153,6 +1153,37 @@ func TestNetdataFunctionQueryFiltersFacetsHistogramAndRows(t *testing.T) {
 	}
 }
 
+func TestNetdataTimestampColumnDoesNotAdvertiseRangeFilter(t *testing.T) {
+	base := uint64(1_700_000_000_000_000)
+	path := createExplorerRawJournal(t, []explorerTestEntry{{
+		realtime: base,
+		payloads: [][]byte{
+			[]byte("MESSAGE=timestamp filter metadata"),
+			[]byte("PRIORITY=6"),
+		},
+	}})
+
+	response, err := SystemdJournalPluginCompatibleNetdataFunction().
+		RunDirectoryRequestJSONWithOptions(filepath.Dir(path), map[string]any{
+			"after":  float64(1_700_000_000),
+			"before": float64(1_700_000_010),
+			"last":   float64(5),
+		}, DefaultNetdataFunctionRunOptions())
+	if err != nil {
+		t.Fatalf("RunDirectoryRequestJSONWithOptions(timestamp filter) error = %v", err)
+	}
+
+	columns := anyMap(t, response["columns"])
+	if got := anyMap(t, columns["timestamp"])["filter"]; got != "none" {
+		t.Fatalf("timestamp filter = %v, want none", got)
+	}
+	for field, metadataAny := range columns {
+		if got := anyMap(t, metadataAny)["filter"]; got == "range" {
+			t.Fatalf("column %s advertises an unsupported range filter", field)
+		}
+	}
+}
+
 func TestNetdataHistogramChartMetadataIncludesDimensionArrays(t *testing.T) {
 	function := SystemdJournalPluginCompatibleNetdataFunction()
 	empty := function.buildHistogram(newDisplayContext(), &ExplorerHistogram{

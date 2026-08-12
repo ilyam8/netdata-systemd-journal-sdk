@@ -33,6 +33,12 @@ for `facets.c`, `facets.h`, and `facets/README.md`. The systemd plugin wrapper
 and `logs_query_status.h` differ between the local upstream checkout and the
 fork checked here, so this spec cites the fork for integration behavior.
 
+Timestamp-filter correction source:
+
+- `netdata/netdata @ 3698c13071e8`
+  - `src/libnetdata/facets/facets.c:2798-2813`
+  - `src/plugins.d/FUNCTION_UI_REFERENCE.md:117-125`
+
 ## Glossary
 
 - **Entry / row**: one journal event.
@@ -935,6 +941,11 @@ SDK column-catalog policy:
   only to diagnose explorer discrepancies and is rejected by production
   explorer entrypoints. Any comparison that passes only with that marker enabled
   has found an SDK explorer bug, not a valid compatibility mode.
+- The synthetic `timestamp` column remains visible, unique, and typed as a
+  timestamp, but its filter is `none`. It is not an accepted parameter or a
+  facet key, so it must not advertise a range filter. Time selection and paging
+  remain available through `has_history`, the `after`/`before` parameters, and
+  timestamp anchor pagination.
 
 Full analysis adds:
 

@@ -2795,7 +2795,7 @@ func columnMetadata(key string, index int) map[string]any {
 func columnDisplayFlags(key string) (bool, string, bool) {
 	switch {
 	case key == "timestamp":
-		return true, "range", false
+		return true, "none", false
 	case key == "_HOSTNAME":
 		return true, "facet", false
 	case key == "rowOptions" || key == "ND_JOURNAL_FILE" || key == "_SOURCE_REALTIME_TIMESTAMP":

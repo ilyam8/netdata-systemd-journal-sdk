@@ -2,11 +2,19 @@
 
 ## Status
 
-Status: completed
+Status: in-progress
 
 `completed` is the successful terminal status. `done` is a directory name, not a status value. Do not use `Status: done` or `Status: complete`.
 
-Sub-state: completed after 2026-06-09 tail-anchor regression repair. Rust and
+Sub-state: reopened on 2026-08-12 for the unsupported timestamp range-filter
+regression. The Rust/Go repair and coordinated `0.8.1` release preparation are
+locally implemented and validated. External review is waived for this small
+metadata correction. The release-preparation commit must remain local; branch
+push, immutable crates.io publication, and Git tag creation/push remain blocked
+on a final user checkpoint. The prior completed state remains below as
+historical context.
+
+Historical sub-state: completed after 2026-06-09 tail-anchor regression repair. Rust and
 Go now match libnetdata tail stop-anchor semantics, backward page anchors are
 exclusive, tail no-change returns `304`, and delta facets/histogram are covered
 by focused contract tests. Five available reviewers returned `PRODUCTION
@@ -2626,3 +2634,369 @@ The release used dependency-ordered dry-run-then-publish because dependent
 crate dry-runs require lower-level internal `0.6.2` crates to be visible on
 crates.io first. No registry tokens or credential material were written to
 durable artifacts.
+
+## Regression - 2026-08-12 Unsupported Timestamp Range Filter
+
+### What Broke
+
+The Rust and Go Netdata function responses advertise `filter: "range"` on the
+synthetic `timestamp` column. Netdata's server-filtered facets table cannot
+service that column filter because `timestamp` is neither an accepted request
+parameter nor a facet key. Applying the advertised filter can therefore leave
+the UI unable to construct a valid request and render empty timestamp cells
+until reload.
+
+This contradicts this SOW's completed content-equivalence contract, which
+explicitly includes complete column metadata. Netdata corrected the originating
+C facets behavior in PR #23456; both SDK product implementations still carry
+the old metadata.
+
+### Evidence
+
+External source:
+
+- `netdata/netdata @ 3698c13071e8`
+  - `src/libnetdata/facets/facets.c:2798-2813` constructs the synthetic
+    timestamp column, explains that history and anchor pagination control the
+    time range, and emits `RRDF_FIELD_FILTER_NONE`.
+  - `src/plugins.d/FUNCTION_UI_REFERENCE.md:117-125` states that
+    `accepted_params` controls which parameters the UI sends to the function.
+  - `src/go/go.mod:94` consumes Go SDK `v0.8.0`.
+  - `src/go/plugin/go.d/collector/snmp_traps/internal/snmptrapsfunc/func_logs.go:77-101`
+    executes the SDK Netdata function directly, so Netdata's C-side correction
+    does not repair SNMP trap log responses.
+
+Repository evidence:
+
+- At pre-repair commit `f2ac0508ce75`,
+  `rust/src/journal/src/netdata.rs:54-71` defines accepted parameters without
+  synthetic `timestamp`, while `rust/src/journal/src/netdata.rs:3193-3235`
+  emits `filter: "range"` for that column.
+- At the same pre-repair commit, `go/journal/netdata.go:55-72` defines the same
+  accepted-parameter contract, while `go/journal/netdata.go:2770-2798` emits
+  the same unsupported filter.
+- Both responses already expose `has_history: true` and anchor pagination with
+  `column: "timestamp"`; those are the supported time controls.
+- `tests/netdata_function/compare_function_json.py:272-288` preserves stable
+  filter metadata, and the strict column comparison rejects differences.
+- This SOW's acceptance criteria at its original lines 182-194 require full
+  column metadata and reject unclassified content differences.
+- The worktree was clean at `f2ac0508ce75` before reopening. Coordinated
+  `v0.8.0` and `go/v0.8.0` tags peel to `4619776b7431`; public registries top
+  out at `0.8.0`, and no local or remote `v0.8.1` / `go/v0.8.1` tag exists.
+
+### Why Previous Validation Missed It
+
+The original strict comparison correctly matched the then-current Netdata C
+output, which also advertised `range`. It proved parity with a shared defect,
+not that every advertised UI filter could round-trip through
+`accepted_params`. No focused Rust or Go test asserted the timestamp filter's
+serviceability independently from the reference output.
+
+### Approved Decisions
+
+1. **Coordinated `0.8.1` release - accepted, long-term-best.** Repair Rust and
+   Go together, publish all eight Rust crates, and use paired root and Go tags
+   on the same commit.
+2. **Coordinated Netdata dependency update - accepted, long-term-best.** After
+   this SDK release is public, update Netdata's Go module and seven Rust SDK
+   crate declarations/locks together. That work runs separately under the
+   Netdata repository's own instructions because this repository forbids
+   cross-repository writes.
+3. **External review waiver - accepted.** The user waived external review
+   because this is a small, one-token metadata correction with focused
+   cross-language tests. Local validation and release gates remain mandatory.
+4. **Immutable publication checkpoint - accepted, surgical risk control.**
+   Complete implementation, validation, release preparation, and a local
+   release commit, then stop for approval. Do not push the branch, publish to
+   crates.io, or create/push Git tags before that approval.
+
+Python and Node.js remain retired experiments under SOW-0116. They do not
+participate in product parity, validation, documentation, or release gates and
+are outside this regression repair.
+
+### Pre-Implementation Gate
+
+Status: ready
+
+Problem / root-cause model:
+
+- The SDK copied an old Netdata column-metadata value that advertises a
+  server-side filter without a corresponding request parameter.
+- The failure is response metadata only. Timestamp values, time-window query
+  semantics, `has_history`, pagination, public API signatures, and the journal
+  file format are unaffected.
+
+Evidence reviewed:
+
+- Netdata PR #23456 and merge commit `3698c13071e8`.
+- Rust and Go accepted-parameter lists, response envelopes, and column metadata
+  builders listed above.
+- The strict comparison implementation and this SOW's original acceptance
+  criteria.
+- Current release tags, registry versions, package manifests, active consumer
+  examples, and Netdata dependency declarations.
+
+Affected contracts and surfaces:
+
+- Rust Netdata-shaped response column metadata.
+- Go Netdata-shaped response column metadata.
+- Focused Rust/Go regression tests and strict function comparison expectations.
+- Netdata facets behavior specification.
+- Coordinated Rust crate and Go module `0.8.1` release metadata, install
+  examples, tags, and package publication preparation.
+- A later Netdata Go/Rust dependency update in a separate repository context.
+
+Existing patterns to reuse:
+
+- Rust `column_metadata()` and Go `columnMetadata()` / `columnDisplayFlags()`.
+- Existing in-module Netdata tests and response-column helpers.
+- Strict column comparator under `tests/netdata_function/`.
+- Coordinated release workflow and dependency order in
+  `.agents/skills/project-release-tagging/SKILL.md`.
+
+Risk and blast radius:
+
+- Runtime risk is low: one stable response string changes from `range` to
+  `none` in each product implementation.
+- Compatibility risk is low: the change removes a nonfunctional UI control and
+  does not alter request parsing, data, pagination, file I/O, or public API
+  signatures.
+- Release risk is medium because crates.io versions and Git tags are
+  irreversible. The selected final checkpoint prevents those actions until the
+  user approves them.
+- Downstream risk is bounded to dependency locks and SNMP trap log response
+  validation; Netdata's Rust consumers do not execute this public facade but
+  will be aligned by explicit user decision.
+
+Sensitive data handling plan:
+
+- Use synthetic repository fixtures and sanitized source/commit references.
+- Do not query the live host journal or record log payloads, credentials,
+  cookies, private endpoints, customer identifiers, or personal data.
+- Registry credentials remain outside durable artifacts and will not be used
+  before the final publication checkpoint.
+
+Implementation plan:
+
+1. Add focused Rust and Go tests that require `timestamp.filter == "none"` and
+   reject any generated response column using `range`.
+2. Capture the focused pre-fix failures.
+3. Change only the Rust and Go timestamp filter metadata to `none`.
+4. Update the Netdata facets specification with current upstream evidence and
+   the supported time-control rationale.
+5. Bump coordinated Rust package metadata and active Rust/Go consumer examples
+   to `0.8.1`; refresh the Rust lockfile without changing dependency versions.
+6. Run focused, full, comparator, documentation, packaging, whitespace,
+   sensitive-data, same-failure, and SOW audit validation.
+7. Record the external-review waiver and complete a release-preparation commit.
+8. Create the release-preparation commit locally, then stop before any branch
+   push, crates.io publication, or Git tag creation/push for the selected
+   immutable-action checkpoint.
+
+Validation plan:
+
+- Focused Rust and Go regression tests, including pre-fix failure evidence.
+- Full Rust Netdata library tests and full Go Netdata tests.
+- Full Rust workspace and Go module tests.
+- Strict comparator unit tests and, where a current updated plugin binary can
+  be exercised entirely against repository-local fixtures, SDK/plugin response
+  comparison.
+- Wiki structure validation and verified Rust/Go examples with repository-local
+  Cargo and Go caches.
+- Rust package listings and publish dry-runs. Dependent dry-runs may report the
+  expected unpublished-`0.8.1` dependency constraint before sequential
+  publication; record that distinction without publishing.
+- Version/example scan, local/remote tag collision check, `git diff --check`,
+  sensitive-data scan, same-failure scan, and `.agents/sow/audit.sh`.
+
+Artifact impact plan:
+
+- `AGENTS.md`: no change expected; project-wide policy is unchanged.
+- Runtime project skills: no change expected; existing orchestration,
+  docs-authoring, and release-tagging workflows cover the repair.
+- Specs: update `.agents/sow/specs/systemd-journal-plugin-facets.md` because the
+  current Netdata response contract changed, and update
+  `.agents/sow/specs/product-scope.md` because its active install example is
+  version-pinned.
+- End-user/operator docs: update active install examples to `0.8.1` as required
+  for a coordinated release; no new usage narrative is needed.
+- End-user/operator skills: none exist in this repository; no impact.
+- SOW lifecycle: SOW-0093 is reopened in `current/`; both status ledgers must
+  reflect the regression through the immutable-action checkpoint. It returns
+  to `done/` only after publication, paired tags, and registry verification are
+  complete and recorded in a post-release completion commit.
+- Netdata artifacts: update its version-pinned module/crate declarations,
+  locks, SNMP response test, and repository-specific durable version records in
+  the separate downstream work.
+
+Open decisions:
+
+- No design decision remains open. The final immutable publication approval is
+  a deliberate execution checkpoint, not an unresolved design question.
+
+### Test-First Failure Evidence
+
+Focused tests were added before the runtime correction and failed on the exact
+shared defect:
+
+- Rust:
+  `cargo test --manifest-path rust/Cargo.toml -p systemd-journal-sdk netdata_timestamp_column_does_not_advertise_range_filter --lib`
+  ran one test and failed because the generated timestamp filter was `range`
+  instead of `none`.
+- Go:
+  `go test ./journal -run '^TestNetdataTimestampColumnDoesNotAdvertiseRangeFilter$' -count=1`
+  failed with `timestamp filter = range, want none`.
+- The first Rust command included `--exact` with an unqualified test name and
+  selected zero tests. It is not counted as evidence; the corrected invocation
+  above selected and failed the intended test.
+- Cargo and Go caches/toolchains were redirected under repository-local
+  `.local/` paths. No host journal or external repository was modified.
+
+### Implementation Result
+
+- Rust and Go now emit `filter: "none"` for the synthetic `timestamp` column.
+  Timestamp type, visibility, uniqueness, datetime transformation, values,
+  history controls, and anchor pagination are unchanged.
+- Each language has a response-level regression test that writes a synthetic
+  journal, invokes the public Netdata function boundary, requires the timestamp
+  filter to be `none`, and rejects `range` on every emitted column.
+- The facets specification now records the corrected upstream contract and
+  supported time controls.
+- The Rust workspace version, all internal publishable dependency constraints,
+  the lockfile's workspace package identities, and all active Rust/Go install
+  examples are prepared at `0.8.1`. No third-party dependency version or
+  checksum changed.
+- The change is patch-semver compatible: it corrects one response metadata
+  token without changing public API signatures, request parsing, journal file
+  format, stored data, or query semantics.
+
+### Post-Repair Validation
+
+Behavior and real-use evidence:
+
+- Focused Rust regression: passed, one selected test.
+- Focused Go regression: passed, one selected test.
+- `cargo check --manifest-path rust/Cargo.toml --workspace`: passed with every
+  workspace-owned package compiling as `0.8.1`.
+- `umask 0027 && cargo test --manifest-path rust/Cargo.toml --workspace --locked`:
+  passed, including the new public-response regression and all workspace unit,
+  integration, and documentation tests.
+- `umask 0027 && go test ./...` with Go `1.26.2`: passed for every Go package,
+  including the new public-response regression.
+- The first full Rust and Go suite invocations inherited the production shell's
+  `0077` umask. Each reached and passed the changed Netdata test, then failed an
+  unchanged file-mode assertion because a requested `0640` file was masked to
+  `0600`. The controlled `0027` reruns above passed both complete suites. This
+  is recorded as environmental test setup, not discarded failure evidence.
+- A live SDK-vs-updated-plugin boundary run was not available inside this
+  repository: no verified local plugin binary contains Netdata merge
+  `3698c13071e8`, and the repository boundary forbids building into an external
+  checkout. The response-level tests exercise the runnable public SDK paths,
+  while the strict comparator tests below prove filter metadata is preserved.
+
+Comparator, formatting, and documentation evidence:
+
+- `python3 -m unittest tests.netdata_function.test_compare_function_json`:
+  passed, 51 tests.
+- `cargo fmt --manifest-path rust/Cargo.toml --all -- --check`: passed.
+- `gofmt -d go/journal/netdata.go go/journal/netdata_test.go`: produced no
+  diff.
+- `python3 tests/docs/check_wiki_docs.py`: passed, 15 wiki files.
+- `python3 tests/docs/verify_examples.py`: passed, 31/31 Rust and Go examples.
+  Its first unchanged invocation timed out after 120 seconds while first-time
+  Go fixture compilation populated the repository-local cache; the warm-cache
+  rerun passed without changing the validator or examples.
+- Active install-example scan found 11 pinned SDK examples, all at Rust
+  `0.8.1` or Go `v0.8.1`. The historical Foyer statement now says the `0.22`
+  surface applies **since** SDK `0.8.0` rather than implying it is the current
+  install version.
+- `git diff --check`: passed.
+
+Same-failure, security, and reviewer disposition:
+
+- The active Rust/Go product scan finds no remaining emitted `"range"`; the
+  only active occurrences are the two new negative assertions. Retired Python
+  and Node experiments retain their historical values under the approved
+  SOW-0116 exclusion and are not release surfaces.
+- The SOW audit's sensitive-data gate scanned durable artifacts and passed.
+  A separate scan of every changed code, documentation, spec, and SOW path
+  found no raw secret, personal name, or workstation path. Synthetic fixtures
+  were used throughout.
+- Two independent read-only internal audits found no blocking code, spec,
+  release-metadata, or lifecycle defect. Their nonblocking accuracy findings
+  were resolved by qualifying pre-fix source evidence, making the no-push
+  checkpoint explicit, refreshing both ledgers, clarifying the Foyer prose,
+  and accounting for both changed specs.
+- External review remains explicitly waived by the user for this small
+  metadata repair.
+- At public `master` commit `f2ac0508ce75`, GitHub reports zero open CodeQL
+  alerts, zero open Dependabot alerts, and successful Go/Rust CodeQL and Codacy
+  checks. The unpushed release candidate cannot have remote scanner evidence;
+  after checkpoint approval, branch push and fresh candidate scanning are
+  mandatory before tag creation or registry publication.
+
+Release-preparation evidence:
+
+- `cargo package --list --allow-dirty --locked` passed for all eight
+  publishable crates in dependency order: common, registry, core, host,
+  log-writer, index, engine, and the public SDK.
+- The common crate's `cargo publish --dry-run --allow-dirty --locked` passed and
+  aborted before upload as required by dry-run mode.
+- The registry crate's pre-publication dry-run stopped at the expected
+  `systemd-journal-sdk-common = "^0.8.1"` registry-resolution error because the
+  approved common release has not been published. Dependent dry-runs must run
+  sequentially after each predecessor is public; this is expected release
+  ordering, not a package defect.
+- Local and remote collision checks found no `v0.8.1` or `go/v0.8.1` tag.
+  All eight crates and the Go proxy likewise have no public `0.8.1` version.
+- The release convention remains eight crates.io packages plus paired annotated
+  `v0.8.1` and `go/v0.8.1` tags on the same commit. No GitHub Release object is
+  required by repository precedent.
+- No crate was published, no tag was created, and no branch or tag was pushed.
+
+SOW and artifact validation:
+
+- `.agents/sow/audit.sh`: passed with one current SOW, a ready
+  pre-implementation gate, correct regression placement, clean sensitive-data
+  checks, and status/directory consistency.
+- `AGENTS.md`: unchanged because no project-wide workflow or guardrail changed.
+- Runtime project skills: unchanged because the existing orchestration,
+  documentation, and release-tagging skills fully cover this repair.
+- Specs: updated `systemd-journal-plugin-facets.md` for the response contract
+  and `product-scope.md` for its version-pinned install example.
+- End-user/operator docs: updated `README.md`, `rust/README.md`, Getting Started,
+  Go API, Rust API, and Rust Crates And Packages install examples. No new usage
+  narrative is needed because supported API behavior did not change.
+- End-user/operator skills: none exist in this repository, so there is no
+  copied consumer skill to update.
+- SOW lifecycle: SOW-0093 remains `in-progress` under `current/`, and both
+  ledgers describe the local checkpoint accurately. It cannot return to
+  `done/` until candidate scanning, publication, paired tags, registry
+  verification, and release closeout are recorded.
+
+### Lessons Extracted From This Regression
+
+- Strict reference parity can reproduce a shared reference defect. UI metadata
+  that advertises a server action also needs a direct serviceability assertion,
+  independent from reference-output equality.
+- Default production umasks can invalidate exact creation-mode tests. Release
+  validation must record the inherited environment and rerun mode assertions
+  under an explicit compatible umask without weakening their expectations.
+
+### Checkpoint And Follow-Up Mapping
+
+- This commit is the local `0.8.1` release-preparation checkpoint. Its hash is
+  reported to the user after creation; self-referencing it inside the same
+  commit is intentionally impossible.
+- After explicit approval: push the branch; verify the remote commit; require
+  fresh GitHub CodeQL/Codacy success; repeat tag and registry collision checks;
+  dry-run and publish all eight crates sequentially; create and push paired
+  annotated tags on the same release commit; verify crates.io and the Go proxy;
+  then complete and return this SOW to `done/` in a post-release closeout
+  commit.
+- The approved Netdata dependency update is an external consumer handoff, not
+  an SDK-repository deferred implementation. In a separate Netdata repository
+  context, update the Go module and sum, all seven Rust crate declarations and
+  lock entries, and the SNMP-trap logs response test. This repository's boundary
+  prohibits making those writes here.

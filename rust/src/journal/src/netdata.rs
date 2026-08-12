@@ -3192,7 +3192,7 @@ fn make_row_timestamps_unique_same_file(rows: &mut [LocatedRow], direction: Dire
 
 fn column_metadata(key: &str, index: usize) -> Value {
     let (visible, filter, full_width) = match key {
-        "timestamp" => (true, "range", false),
+        "timestamp" => (true, "none", false),
         "rowOptions" => (false, "none", false),
         "_HOSTNAME" => (true, "facet", false),
         "ND_JOURNAL_PROCESS" | "MESSAGE" => (true, "none", key == "MESSAGE"),
@@ -5167,6 +5167,29 @@ mod tests {
             parsed.to_explorer_query(1, None, NETDATA_JOURNAL_VS_REALTIME_DELTA_DEFAULT_USEC);
 
         assert!(!query.debug_collect_column_fields_by_row_traversal);
+    }
+
+    #[test]
+    fn netdata_timestamp_column_does_not_advertise_range_filter() {
+        let dir = TempDir::new().expect("tempdir");
+        write_netdata_test_journal(dir.path(), 1);
+        let response = run_netdata_contract_request(
+            dir.path(),
+            json!({
+                "after": 1_700_000_000,
+                "before": 1_700_000_010,
+                "last": 5,
+            }),
+        );
+
+        let columns = response["columns"].as_object().expect("columns");
+        assert_eq!(columns["timestamp"]["filter"], "none");
+        for (field, metadata) in columns {
+            assert_ne!(
+                metadata["filter"], "range",
+                "column {field} advertises an unsupported range filter"
+            );
+        }
     }
 
     #[test]

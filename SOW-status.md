@@ -1,13 +1,19 @@
 # SOW Status
 
-Last updated: 2026-07-27
+Last updated: 2026-08-12
 
 This root file is a short convenience index. The canonical detailed SOW ledger
 is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Current
 
-- None.
+- `SOW-0093-20260605-netdata-function-boundary-reader-comparison.md` -
+  in-progress after reopening the unsupported timestamp range-filter
+  regression. The Rust/Go correction and coordinated `0.8.1` release
+  preparation are locally implemented and validated; external review is
+  waived. The release-preparation commit remains local, and branch push,
+  crates.io publication, plus Git tag creation/push require the final user
+  checkpoint.
 
 ## Pending
 
@@ -126,7 +132,6 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 - `SOW-0065-20260530-parallel-language-parity-closure.md` - closed without implementation on 2026-06-11, superseded by the docs-and-parity program SOW-0103 through SOW-0106 after all prerequisites completed and Go parity was already delivered by SOW-0095/SOW-0102; the user chose sequential SOWs with external implementer `llm-netdata-cloud/minimax-m3-coder` and the other `llm-netdata-cloud` pool models as read-only reviewers.
 - `SOW-0102-20260611-netdata-function-source-selector-labels.md` - completed. Rust and Go Netdata function configs now expose source selector name/help metadata for the stable `__logs_sources` wire id, preserving `Journal Sources` defaults while allowing consumers such as SNMP traps to show domain wording like `Trap Jobs`; focused tests passed, docs/specs were updated, all six approved reviewers returned `PRODUCTION GRADE`, Rust crates were published to crates.io at `0.6.4`, and release tags are `v0.6.4` plus `go/v0.6.4`.
 - `SOW-0101-20260609-netdata-function-stateful-equivalence.md` - completed. Added stateful SDK-wrapper versus installed Netdata `systemd-journal.plugin` side-by-side tests for anchors, forward/backward paging, tail 304 behavior, filtered tail empty-200 behavior, and delta facets/histograms; final validation passed 10/10 one-shot request fixtures plus all five stateful sequences. Rust crates were published to crates.io at `0.6.3`, and release tags are `v0.6.3` plus `go/v0.6.3`.
-- `SOW-0093-20260605-netdata-function-boundary-reader-comparison.md` - completed after tail-anchor regression repair. Rust and Go now use libnetdata-compatible tail stop-anchor semantics, backward page anchors are exclusive, tail no-change returns `304`, focused paging/tail/delta contract tests pass, five available reviewers returned `PRODUCTION GRADE`, Kimi was unavailable due quota, Rust crates were published to crates.io at `0.6.2`, and release tags are `v0.6.2` plus `go/v0.6.2`.
 - `SOW-0100-20260608-consumer-docs-github-wiki.md` - completed after regression repair. GitHub wiki navigation now uses `[[Target|Label]]` wiki links, the wiki has professional API overview plus Rust and Go language guides with examples, and the docs validator rejects production `*.md` wiki links while allowing fenced anti-pattern examples.
 - `SOW-0099-20260608-rust-crates-io-publication.md` - completed. Rust SDK packages were published to crates.io at `0.6.0` under `systemd-journal-sdk` plus project-prefixed internal package names; release tags are created on the SOW close commit.
 - `SOW-0096-20260607-codacy-metrics-and-coverage-hygiene.md` - completed. Go and Rust coverage reports now remove test/test-harness paths before Codacy upload, the Rust/Go Codacy metrics audit is committed, GitHub code scanning has zero open alerts on final implementation commit `7e3d3e5d`, Codacy reports `issuesCount = 0`, coverage `73%`, complexity `46%`, and duplication `30%`; remaining production metric debt is tracked by SOW-0097 and SOW-0098.

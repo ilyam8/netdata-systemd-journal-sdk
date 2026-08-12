@@ -1,10 +1,16 @@
 # SOW Status
 
-Last updated: 2026-07-27
+Last updated: 2026-08-12
 
 ## Current
 
-- None.
+- SOW-0093 - Netdata Function Boundary Reader Comparison: in-progress after
+  reopening the unsupported timestamp range-filter regression. Rust and Go now
+  emit `filter: "none"` for the synthetic timestamp column, focused and full
+  local validation pass, and coordinated `0.8.1` release metadata is prepared.
+  External review is waived. The release-preparation commit remains local;
+  branch push, crates.io publication, and Git tag creation/push require the
+  final user checkpoint.
 
 ## Pending
 
@@ -385,13 +391,6 @@ Last updated: 2026-07-27
   have focused boundary tests for the repaired wrapper behavior. Rust crates
   were published to crates.io at `0.6.3`, and release tags are `v0.6.3` plus
   `go/v0.6.3`.
-- SOW-0093 - Netdata Function Boundary Reader Comparison: completed after
-  tail-anchor regression repair. Rust and Go now use libnetdata-compatible
-  tail stop-anchor semantics, backward page anchors are exclusive, tail
-  no-change returns `304`, focused paging/tail/delta contract tests pass, five
-  available reviewers returned `PRODUCTION GRADE`, Kimi was unavailable due
-  quota, Rust crates were published to crates.io at `0.6.2`, and release tags
-  are `v0.6.2` plus `go/v0.6.2`.
 - SOW-0100 - Consumer Docs And GitHub Wiki Publication: completed after
   regression repair. GitHub wiki navigation now uses `[[Target|Label]]` wiki
   links, the wiki has professional API overview plus Rust and Go language
