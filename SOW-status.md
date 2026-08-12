@@ -11,9 +11,10 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
   in-progress after reopening the unsupported timestamp range-filter
   regression. The Rust/Go correction and coordinated `0.8.1` release
   preparation are locally implemented and validated; external review is
-  waived. The release-preparation commit remains local, and branch push,
-  crates.io publication, plus Git tag creation/push require the final user
-  checkpoint.
+  waived and release execution is approved. The candidate is pushed and all
+  non-dispositioned checks pass. Five warning-level Codacy duplicate headings
+  confined to the historical SOW are explicitly accepted; publication and
+  paired tag creation/push are in progress.
 
 ## Pending
 

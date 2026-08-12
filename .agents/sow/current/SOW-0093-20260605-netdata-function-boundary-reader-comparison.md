@@ -9,10 +9,13 @@ Status: in-progress
 Sub-state: reopened on 2026-08-12 for the unsupported timestamp range-filter
 regression. The Rust/Go repair and coordinated `0.8.1` release preparation are
 locally implemented and validated. External review is waived for this small
-metadata correction. The release-preparation commit must remain local; branch
-push, immutable crates.io publication, and Git tag creation/push remain blocked
-on a final user checkpoint. The prior completed state remains below as
-historical context.
+metadata correction. The user approved release execution, and the
+release-preparation commit is pushed. Fresh product/security checks pass. The
+user explicitly dispositioned five Codacy `MD024` duplicate-heading warnings
+as accepted because every finding is confined to this reopened historical SOW;
+no Rust, Go, release metadata, or consumer documentation is affected. Crate
+publication and paired tag creation/push are authorized and pending. The prior
+completed state remains below as historical context.
 
 Historical sub-state: completed after 2026-06-09 tail-anchor regression repair. Rust and
 Go now match libnetdata tail stop-anchor semantics, backward page anchors are
@@ -2930,11 +2933,21 @@ Same-failure, security, and reviewer disposition:
   and accounting for both changed specs.
 - External review remains explicitly waived by the user for this small
   metadata repair.
-- At public `master` commit `f2ac0508ce75`, GitHub reports zero open CodeQL
-  alerts, zero open Dependabot alerts, and successful Go/Rust CodeQL and Codacy
-  checks. The unpushed release candidate cannot have remote scanner evidence;
-  after checkpoint approval, branch push and fresh candidate scanning are
-  mandatory before tag creation or registry publication.
+- At release-preparation commit `2cb312a6e7b9`, both the repository Go/Rust
+  CodeQL workflow and GitHub's dynamic Go/Python/JavaScript-TypeScript code
+  scanning passed. Documentation examples, wiki validation/publication, and
+  Go/Rust coverage also passed.
+- Codacy run `31605652991` reported exactly five warning-level `MD024`
+  duplicate headings, all in this SOW's appended regression history at lines
+  2640, 2654, 2688, 2718, and 2838 of that commit. GitHub alert numbers are
+  3673 through 3677. The warnings describe repeated SOW subsection titles;
+  they do not describe product code, release metadata, consumer docs, runtime
+  behavior, security, or package contents.
+- The user explicitly directed that these SOW-only warnings be ignored. They
+  are accepted and dispositioned under the project rule allowing scanner
+  findings to be fixed or explicitly dispositioned before release. No lint
+  suppression, source change, alert dismissal, or workflow rerun is required.
+  All other scanner and release gates remain enforced.
 
 Release-preparation evidence:
 
@@ -2953,7 +2966,9 @@ Release-preparation evidence:
 - The release convention remains eight crates.io packages plus paired annotated
   `v0.8.1` and `go/v0.8.1` tags on the same commit. No GitHub Release object is
   required by repository precedent.
-- No crate was published, no tag was created, and no branch or tag was pushed.
+- No crate was published and no tag was created or pushed. The user approved
+  the immutable checkpoint and `master` was pushed to release-preparation
+  commit `2cb312a6e7b9`; the remote hash was verified exactly.
 
 SOW and artifact validation:
 
@@ -2971,9 +2986,9 @@ SOW and artifact validation:
 - End-user/operator skills: none exist in this repository, so there is no
   copied consumer skill to update.
 - SOW lifecycle: SOW-0093 remains `in-progress` under `current/`, and both
-  ledgers describe the local checkpoint accurately. It cannot return to
-  `done/` until candidate scanning, publication, paired tags, registry
-  verification, and release closeout are recorded.
+  ledgers describe the approved release execution plus explicit Codacy
+  disposition. It cannot return to `done/` until publication, paired tags,
+  registry verification, and release closeout are recorded.
 
 ### Lessons Extracted From This Regression
 
@@ -2989,12 +3004,13 @@ SOW and artifact validation:
 - This commit is the local `0.8.1` release-preparation checkpoint. Its hash is
   reported to the user after creation; self-referencing it inside the same
   commit is intentionally impossible.
-- After explicit approval: push the branch; verify the remote commit; require
-  fresh GitHub CodeQL/Codacy success; repeat tag and registry collision checks;
-  dry-run and publish all eight crates sequentially; create and push paired
-  annotated tags on the same release commit; verify crates.io and the Go proxy;
-  then complete and return this SOW to `done/` in a post-release closeout
-  commit.
+- Release execution is approved. The branch is pushed and the remote commit is
+  verified. Fresh CodeQL and all non-dispositioned workflows passed; the five
+  SOW-only Codacy warnings are explicitly accepted above. Repeat tag and
+  registry collision checks; dry-run and publish all eight crates sequentially;
+  create and push paired annotated tags on the same release commit; verify
+  crates.io and the Go proxy; then complete and return this SOW to `done/` in a
+  post-release closeout commit.
 - The approved Netdata dependency update is an external consumer handoff, not
   an SDK-repository deferred implementation. In a separate Netdata repository
   context, update the Go module and sum, all seven Rust crate declarations and

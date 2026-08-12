@@ -8,9 +8,11 @@ Last updated: 2026-08-12
   reopening the unsupported timestamp range-filter regression. Rust and Go now
   emit `filter: "none"` for the synthetic timestamp column, focused and full
   local validation pass, and coordinated `0.8.1` release metadata is prepared.
-  External review is waived. The release-preparation commit remains local;
-  branch push, crates.io publication, and Git tag creation/push require the
-  final user checkpoint.
+  External review is waived and release execution is approved. The candidate
+  is pushed; fresh CodeQL, docs, wiki, and coverage checks pass. Five
+  warning-level Codacy duplicate headings confined to the reopened historical
+  SOW are explicitly accepted by user disposition. Crate publication and
+  paired tag creation/push are in progress.
 
 ## Pending
 
