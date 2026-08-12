@@ -2,20 +2,20 @@
 
 ## Status
 
-Status: in-progress
+Status: completed
 
 `completed` is the successful terminal status. `done` is a directory name, not a status value. Do not use `Status: done` or `Status: complete`.
 
-Sub-state: reopened on 2026-08-12 for the unsupported timestamp range-filter
-regression. The Rust/Go repair and coordinated `0.8.1` release preparation are
-locally implemented and validated. External review is waived for this small
-metadata correction. The user approved release execution, and the
-release-preparation commit is pushed. Fresh product/security checks pass. The
-user explicitly dispositioned five Codacy `MD024` duplicate-heading warnings
-as accepted because every finding is confined to this reopened historical SOW;
-no Rust, Go, release metadata, or consumer documentation is affected. Crate
-publication and paired tag creation/push are authorized and pending. The prior
-completed state remains below as historical context.
+Sub-state: completed on 2026-08-12 after repairing the unsupported timestamp
+range-filter metadata in Rust and Go and releasing coordinated `0.8.1` crates
+and Go module tags. All eight Rust crates are published and non-yanked;
+annotated `v0.8.1` and `go/v0.8.1` tags peel to release commit
+`9d5e3e19cf53179aaec3af67ac409d844a44c15f`; clean Rust `1.91.0` registry
+consumption and Go `1.26.2` proxy consumption pass. External review was waived
+for this small metadata correction. Five Codacy `MD024` warnings confined to
+repeated headings in this historical SOW are explicitly accepted by user
+disposition; no product or release artifact is affected. The prior completed
+state remains below as historical context.
 
 Historical sub-state: completed after 2026-06-09 tail-anchor regression repair. Rust and
 Go now match libnetdata tail stop-anchor semantics, backward page anchors are
@@ -3016,3 +3016,69 @@ SOW and artifact validation:
   context, update the Go module and sum, all seven Rust crate declarations and
   lock entries, and the SNMP-trap logs response test. This repository's boundary
   prohibits making those writes here.
+
+### Release Completion - 2026-08-12
+
+Rust registry publication:
+
+- Each package passed a fresh `cargo publish --dry-run --locked` immediately
+  before upload and was then published in dependency order:
+  `systemd-journal-sdk-common`, `systemd-journal-sdk-registry`,
+  `systemd-journal-sdk-core`, `systemd-journal-sdk-host`,
+  `systemd-journal-sdk-log-writer`, `systemd-journal-sdk-index`,
+  `systemd-journal-sdk-engine`, and `systemd-journal-sdk`.
+- The crates.io exact-version API and sparse index independently report
+  `0.8.1` for all eight packages with `yanked: false`.
+- A clean consumer using Rust `1.91.0` and exact `=0.8.1` requirements for all
+  eight packages passed `cargo check`. Cargo selected only dependencies
+  compatible with the declared Rust floor.
+
+Git and Go delivery:
+
+- Annotated root tag `v0.8.1` and annotated Go submodule tag `go/v0.8.1` were
+  created and pushed after collision checks. Both remote tags peel to
+  `9d5e3e19cf53179aaec3af67ac409d844a44c15f`.
+- The Go proxy returns `v0.8.1` with module path
+  `github.com/netdata/systemd-journal-sdk/go`, Go version `1.26.2`, subdirectory
+  `go`, and origin hash `9d5e3e19cf53179aaec3af67ac409d844a44c15f`.
+- `go mod download -json` through `proxy.golang.org` and `sum.golang.org`
+  returned non-empty module and `go.mod` checksums with no error.
+- Repository precedent uses crates plus annotated tags and does not create a
+  separate GitHub Release object.
+
+Final scanner disposition:
+
+- On release-preparation commit `2cb312a6e7b9`, repository CodeQL, GitHub
+  dynamic code scanning, docs examples, wiki publication, and coverage passed.
+- The explicit scanner-disposition commit
+  `9d5e3e19cf53179aaec3af67ac409d844a44c15f` passed repository CodeQL, GitHub
+  dynamic code scanning, and coverage. Path-filtered docs/wiki workflows did
+  not rerun because that commit changed only SOW records.
+- Codacy reported exactly the same five warning-level SOW-only duplicate
+  headings and no additional finding. The user explicitly accepted those
+  warnings; alert numbers 3673 through 3677 remain the complete disposition.
+- Dependabot and product CodeQL have no open release-blocking alert.
+
+Final artifact and lifecycle gate:
+
+- `.agents/sow/audit.sh` passed after setting `Status: completed` and moving
+  SOW-0093 back to `done/`; status/directory consistency and the sensitive-data
+  gate are clean with no current SOW.
+- The required pre-close search for deferred/future/follow-up terms found only
+  historical narrative with existing dispositions or SOW mappings, plus the
+  explicitly mapped external Netdata consumer handoff below. No SDK work is
+  left untracked.
+- `AGENTS.md` and runtime project skills remain unchanged because no workflow
+  contract or implementation method changed.
+- Both affected specs and all version-pinned consumer install examples are
+  current at `0.8.1`; verified documentation examples passed 31/31.
+- No end-user/operator skill exists to update. No raw sensitive data was
+  written to a durable artifact.
+- The same-failure scan found no active Rust/Go `range` producer; retired
+  experiments remain excluded under SOW-0116.
+- The only remaining handoff is the approved Netdata consumer update in a
+  separate repository context. It is not an untracked SDK implementation item.
+
+Final outcome: the timestamp column no longer advertises an unserviceable range
+filter in either product SDK, coordinated Rust and Go `0.8.1` artifacts are
+public and verified, and SOW-0093 is completed again.

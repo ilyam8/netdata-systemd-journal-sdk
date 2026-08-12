@@ -7,14 +7,7 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Current
 
-- `SOW-0093-20260605-netdata-function-boundary-reader-comparison.md` -
-  in-progress after reopening the unsupported timestamp range-filter
-  regression. The Rust/Go correction and coordinated `0.8.1` release
-  preparation are locally implemented and validated; external review is
-  waived and release execution is approved. The candidate is pushed and all
-  non-dispositioned checks pass. Five warning-level Codacy duplicate headings
-  confined to the historical SOW are explicitly accepted; publication and
-  paired tag creation/push are in progress.
+- None.
 
 ## Pending
 
@@ -42,6 +35,13 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0093-20260605-netdata-function-boundary-reader-comparison.md` -
+  completed again after correcting the Rust/Go synthetic timestamp filter.
+  Coordinated `0.8.1` is public from
+  `9d5e3e19cf53179aaec3af67ac409d844a44c15f`: all eight Rust crates are
+  non-yanked, paired annotated root/Go tags peel to that commit, and clean Rust
+  `1.91.0` plus Go `1.26.2` registry consumption passes. Five SOW-only Codacy
+  duplicate-heading warnings are explicitly accepted by user disposition.
 - `SOW-0141-20260727-v0-8-0-dependency-refresh.md` - completed. Released Rust
   and Go `0.8.0` from commit
   `4619776b74311338b1689b2ab1fb0936b7746e49`; both tags resolve to that commit,

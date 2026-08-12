@@ -4,15 +4,7 @@ Last updated: 2026-08-12
 
 ## Current
 
-- SOW-0093 - Netdata Function Boundary Reader Comparison: in-progress after
-  reopening the unsupported timestamp range-filter regression. Rust and Go now
-  emit `filter: "none"` for the synthetic timestamp column, focused and full
-  local validation pass, and coordinated `0.8.1` release metadata is prepared.
-  External review is waived and release execution is approved. The candidate
-  is pushed; fresh CodeQL, docs, wiki, and coverage checks pass. Five
-  warning-level Codacy duplicate headings confined to the reopened historical
-  SOW are explicitly accepted by user disposition. Crate publication and
-  paired tag creation/push are in progress.
+- None.
 
 ## Pending
 
@@ -53,6 +45,14 @@ Last updated: 2026-08-12
 
 ## Recently Closed Or Completed
 
+- SOW-0093 - Netdata Function Boundary Reader Comparison: completed again
+  after correcting the synthetic timestamp filter metadata in Rust and Go.
+  Coordinated `0.8.1` is released from
+  `9d5e3e19cf53179aaec3af67ac409d844a44c15f`; all eight Rust crates are public
+  and non-yanked, paired annotated `v0.8.1` and `go/v0.8.1` tags peel to that
+  commit, and clean Rust `1.91.0` plus Go `1.26.2` registry consumption passes.
+  Five warning-level Codacy duplicate headings confined to the historical SOW
+  are explicitly accepted by user disposition.
 - SOW-0141 - v0.8.0 Dependency Refresh: completed. Released coordinated Rust
   and Go `0.8.0` from commit
   `4619776b74311338b1689b2ab1fb0936b7746e49`; both release tags resolve to that
