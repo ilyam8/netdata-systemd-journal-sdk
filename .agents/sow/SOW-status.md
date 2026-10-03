@@ -8,6 +8,9 @@ Last updated: 2026-10-03
 
 ## Pending
 
+- SOW-0144 - Go v0.8.2 Publication: open. Waits for the release-preparation PR
+  to merge, then publishes paired annotated tags and verifies public Go module
+  consumption of `Log.CloseWithoutRetention()`.
 - SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
   follow-up analysis for remaining global ENTRY-array and regular/fallback DATA
   array reopens found during SOW-0135 review; no implementation is authorized.
@@ -45,6 +48,10 @@ Last updated: 2026-10-03
 
 ## Recently Closed Or Completed
 
+- SOW-0143 - Go v0.8.2 Release Preparation: completed. Go install guidance and
+  close semantics are updated, full Go race tests and a CGO-disabled consumer
+  pass on Go `1.26.2`, and all 17 Go doc examples plus wiki/SOW checks pass.
+  Publication is tracked by pending SOW-0144 after the release PR merges.
 - SOW-0142 - Go Close Without Retention: completed. Additive CloseWithoutRetention API implemented in fbb8235, full Go race/vet and documentation checks passed, independent Astra review found no blocker. No release or push authorized.
 
 - SOW-0093 - Netdata Function Boundary Reader Comparison: completed again

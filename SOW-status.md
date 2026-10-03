@@ -1,6 +1,6 @@
 # SOW Status
 
-Last updated: 2026-08-12
+Last updated: 2026-10-03
 
 This root file is a short convenience index. The canonical detailed SOW ledger
 is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
@@ -11,6 +11,9 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Pending
 
+- `SOW-0144-20261003-go-v0-8-2-publication.md` - open. Publishes paired `0.8.2`
+  root/Go tags and verifies downloaded module consumption after the release PR
+  merges. Rust registry packages remain `0.8.1`.
 - `SOW-0137-20260726-rust-writer-residual-array-open-performance.md` - open.
   Tracks measurement and design decisions for remaining canonical Rust writer
   global ENTRY-array and regular/fallback DATA array reopens.
@@ -35,6 +38,10 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0143-20261003-go-v0-8-2-release.md` - completed. Release-preparation
+  docs, Go `1.26.2` race tests, a CGO-disabled retention-reload consumer,
+  17 Go documentation examples, and wiki/SOW checks pass. Tag publication
+  remains tracked by SOW-0144 after PR merge.
 - `SOW-0093-20260605-netdata-function-boundary-reader-comparison.md` -
   completed again after correcting the Rust/Go synthetic timestamp filter.
   Coordinated `0.8.1` is public from

@@ -3,6 +3,15 @@
 This module contains pure-Go systemd journal reader and writer components. It
 does not use CGO, native addons, or libsystemd linkage.
 
+Install Go release `v0.8.2`:
+
+```sh
+go get github.com/netdata/systemd-journal-sdk/go@v0.8.2
+```
+
+This release adds `Log.CloseWithoutRetention()` for closing before changing
+retention settings. Go `1.26.2` or newer is required.
+
 Import path:
 
 ```go
@@ -313,10 +322,11 @@ existing-active reopen and `LogOpenEager` enforce it during `NewLog()`, while
 lazy archived-only construction defers enforcement until the first append opens
 the active file, before the first entry is written.
 
-
-`Log.Close()` archives the active file and applies its configured retention.
-Use `Log.CloseWithoutRetention()` when closing before a policy change: it uses
-exactly the same archive/durability path but skips retention. The caller must
+`Log.Close()` applies retention when it archives an active writer, except when
+strict naming discards an empty file. An unopened lazy log also skips retention.
+`Log.CloseWithoutRetention()` is available in Go `v0.8.2` and later. Use it when
+closing before a policy change: it follows the same archive/durability path as
+`Close()` and skips retention. The caller must
 reopen with the new policy or enforce retention separately. Both methods
 remove an empty active file with strict systemd naming, retain its archive with
 chain naming, and are idempotent after closure; calling `Close()`

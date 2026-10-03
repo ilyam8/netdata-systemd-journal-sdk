@@ -40,7 +40,7 @@ layout.
 Go 1.26.2 or newer is required.
 
 ```sh
-go get github.com/netdata/systemd-journal-sdk/go@v0.8.1
+go get github.com/netdata/systemd-journal-sdk/go@v0.8.2
 ```
 
 Then import:

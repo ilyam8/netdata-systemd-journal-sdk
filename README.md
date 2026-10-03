@@ -90,3 +90,16 @@ on the project-prefixed internal packages:
   identity and monotonic helper crate
 - `systemd-journal-sdk-index`
 - `systemd-journal-sdk-engine`
+
+## Go Package
+
+Install the Go module at `v0.8.2`:
+
+```sh
+go get github.com/netdata/systemd-journal-sdk/go@v0.8.2
+```
+
+Go `v0.8.2` adds `journal.Log.CloseWithoutRetention()`, which archives and
+closes the current journal without applying retention. It supports reopening
+with changed retention settings while preserving archived history. See
+[the Go API guide](docs/Go-API.md) for the caller's retention responsibilities.

@@ -33,6 +33,14 @@ Netdata Rust integrations:
 - `systemd-journal-sdk-index`
 - `systemd-journal-sdk-engine`
 
+## Go Module Release
+
+Go consumers install `github.com/netdata/systemd-journal-sdk/go@v0.8.2`.
+The Go-only `0.8.2` release adds `Log.CloseWithoutRetention()` for closing a
+directory writer before changing its retention policy. Root `v0.8.2` and
+submodule `go/v0.8.2` tags must identify the same release source commit. Rust
+registry packages remain at their published `0.8.1` version.
+
 ## Consumer Documentation
 
 Committed consumer documentation lives under `docs/` as GitHub wiki source.
@@ -393,10 +401,12 @@ Current Go writer feature slice:
   but is never selected for deletion to satisfy retention limits. Unset limits
   are disabled; explicitly enabled zero or negative limits fail construction.
   `EnforceRetention()` applies retention without requiring a rotation or close.
-  Go `CloseWithoutRetention()` archives/releases the current file with the normal
-  durability path but skips retention, allowing a caller to reopen with a changed
+  Go `CloseWithoutRetention()`, available since `v0.8.2`, archives/releases the
+  current file with the normal durability path but skips retention, allowing a
+  caller to reopen with a changed
   policy without applying stale limits. The caller owns subsequent enforcement;
-  normal `Close()` still applies its configured policy. Both are idempotent;
+  normal `Close()` applies its policy on the archive path, except for an unopened
+  lazy log or an empty strict-named active file. Both methods are idempotent;
   empty active files are removed with strict systemd naming and archived with
   chain naming;
 - high-level Go directory writer construction supports lazy open by default and
