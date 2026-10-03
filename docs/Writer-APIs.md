@@ -151,10 +151,11 @@ Use explicit size and duration limits for production backends. The SDK derives
 systemd-like file-size defaults from retention envelopes when supported by the
 language implementation, with a one-twentieth rotation step by default.
 
-
-`Log.Close()` archives the active file and applies its configured retention.
-Use `Log.CloseWithoutRetention()` when closing before a policy change: it uses
-exactly the same archive/durability path but skips retention. The caller must
+In Go, `Log.Close()` applies retention when it archives an active writer, except when
+strict naming discards an empty file. An unopened lazy log also skips retention.
+`Log.CloseWithoutRetention()` is available in Go `v0.8.2` and later. Use it when
+closing before a policy change: it follows the same archive/durability path as
+`Close()` and skips retention. The caller must
 reopen with the new policy or enforce retention separately. Both methods
 remove an empty active file with strict systemd naming, retain its archive with
 chain naming, and are idempotent after closure; calling `Close()`

@@ -1,6 +1,6 @@
 # SOW Status
 
-Last updated: 2026-08-12
+Last updated: 2026-10-03
 
 This root file is a short convenience index. The canonical detailed SOW ledger
 is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
@@ -35,6 +35,17 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0144-20261003-go-v0-8-2-publication.md` - completed in PR #2 under the
+  user's explicit close-out instruction. The completed record specifies paired
+  tag publication and downloaded-module verification after merge.
+- `SOW-0143-20261003-go-v0-8-2-release.md` - completed. Release-preparation
+  docs, Go `1.26.2` race tests, a CGO-disabled retention-reload consumer,
+  17 Go documentation examples, and wiki/SOW checks pass. Tag publication
+  follows the procedure in completed SOW-0144 after PR merge.
+- `SOW-0142-20261003-go-close-without-retention.md` - completed and merged
+  through PR #1 at `777ca98f40eeb3289673ae6d069aba6c372c50b7`. The new Go
+  API passed full race/vet, documentation validation, and independent review.
+  SDK release preparation/publication are tracked by SOW-0143 and SOW-0144.
 - `SOW-0093-20260605-netdata-function-boundary-reader-comparison.md` -
   completed again after correcting the Rust/Go synthetic timestamp filter.
   Coordinated `0.8.1` is public from
