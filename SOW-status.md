@@ -11,9 +11,6 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Pending
 
-- `SOW-0144-20261003-go-v0-8-2-publication.md` - open. Publishes paired `0.8.2`
-  root/Go tags and verifies downloaded module consumption after the release PR
-  merges. Rust registry packages remain `0.8.1`.
 - `SOW-0137-20260726-rust-writer-residual-array-open-performance.md` - open.
   Tracks measurement and design decisions for remaining canonical Rust writer
   global ENTRY-array and regular/fallback DATA array reopens.
@@ -38,10 +35,13 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0144-20261003-go-v0-8-2-publication.md` - completed in PR #2 under the
+  user's explicit close-out instruction. The completed record specifies paired
+  tag publication and downloaded-module verification after merge.
 - `SOW-0143-20261003-go-v0-8-2-release.md` - completed. Release-preparation
   docs, Go `1.26.2` race tests, a CGO-disabled retention-reload consumer,
   17 Go documentation examples, and wiki/SOW checks pass. Tag publication
-  remains tracked by SOW-0144 after PR merge.
+  follows the procedure in completed SOW-0144 after PR merge.
 - `SOW-0142-20261003-go-close-without-retention.md` - completed and merged
   through PR #1 at `777ca98f40eeb3289673ae6d069aba6c372c50b7`. The new Go
   API passed full race/vet, documentation validation, and independent review.

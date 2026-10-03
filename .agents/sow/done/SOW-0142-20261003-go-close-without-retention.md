@@ -92,7 +92,8 @@ Main implements SDK files. Independent reviewer must be read-only, no child agen
 - PR #1 merged at 777ca98f40eeb3289673ae6d069aba6c372c50b7 after final review.
   Its tree matches reviewed head b749e5c409dda6bd424b254ced694bc47e15f96d.
 - The user subsequently authorized Go v0.8.2 through a release PR. SOW-0143
-  completes preparation in PR #2; pending SOW-0144 owns post-merge publication.
+  completes preparation in PR #2; SOW-0144 records post-merge publication and
+  is completed in that PR under the user's explicit close-out instruction.
 - Reconciled the completed API status in this record and both status summaries.
   This correction changes tracking only; runtime validation remains the
   accepted implementation evidence, with SOW audit and whitespace checks rerun.
@@ -122,7 +123,7 @@ Consumer reconfiguration must use explicit SDK contracts rather than shallow pol
 ## Followup
 
 The subsequent authorized SDK release is tracked by completed
-`SOW-0143-20261003-go-v0-8-2-release.md` and pending
+`SOW-0143-20261003-go-v0-8-2-release.md` and completed
 `SOW-0144-20261003-go-v0-8-2-publication.md`. Consumer adoption remains in the
 consuming DEM initiative Q17.
 
