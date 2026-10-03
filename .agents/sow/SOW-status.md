@@ -1,6 +1,6 @@
 # SOW Status
 
-Last updated: 2026-08-12
+Last updated: 2026-10-03
 
 ## Current
 
@@ -44,6 +44,8 @@ Last updated: 2026-08-12
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
+
+- SOW-0142 - Go Close Without Retention: completed. Additive CloseWithoutRetention API implemented in fbb8235, full Go race/vet and documentation checks passed, independent Astra review found no blocker. No release or push authorized.
 
 - SOW-0093 - Netdata Function Boundary Reader Comparison: completed again
   after correcting the synthetic timestamp filter metadata in Rust and Go.

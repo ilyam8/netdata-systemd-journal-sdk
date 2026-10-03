@@ -645,6 +645,19 @@ func (l *Log) Sync() error {
 
 // Close archives the active file and applies retention.
 func (l *Log) Close() error {
+	return l.close(true)
+}
+
+// CloseWithoutRetention archives and closes the active file with the same
+// durability behavior as Close, but does not apply the configured retention
+// policy. Use it before reopening with a changed policy; the caller owns
+// subsequent retention enforcement. Like Close, it discards an empty active
+// file with strict systemd naming and is idempotent after successful closure.
+func (l *Log) CloseWithoutRetention() error {
+	return l.close(false)
+}
+
+func (l *Log) close(enforceRetention bool) error {
 	if l.closed {
 		return nil
 	}
@@ -677,9 +690,11 @@ func (l *Log) Close() error {
 		}
 		return err
 	}
-	if err := l.enforceRetention(protectedPath); err != nil {
-		l.closed = true
-		return err
+	if enforceRetention {
+		if err := l.enforceRetention(protectedPath); err != nil {
+			l.closed = true
+			return err
+		}
 	}
 	l.closed = true
 	return nil
