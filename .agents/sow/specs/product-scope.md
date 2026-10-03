@@ -18,7 +18,7 @@ alias it as `journal` in Cargo dependencies to keep the existing
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.8.1" }
+journal = { package = "systemd-journal-sdk", version = "0.8.2" }
 ```
 
 The Rust workspace also publishes lower-level project-prefixed packages for
@@ -39,7 +39,9 @@ Go consumers install `github.com/netdata/systemd-journal-sdk/go@v0.8.2`.
 The Go-only `0.8.2` release adds `Log.CloseWithoutRetention()` for closing a
 directory writer before changing its retention policy. Root `v0.8.2` and
 submodule `go/v0.8.2` tags must identify the same release source commit. Rust
-registry packages remain at their published `0.8.1` version.
+registry packages advance separately to `0.8.2` for Rust API parity from the
+later Rust PR's merged commit. The existing root and Go tags remain at the
+earlier Go release commit; they are not moved for staggered Rust publication.
 
 ## Consumer Documentation
 
@@ -842,6 +844,12 @@ Current Go reader limitations:
 
 Current Rust writer feature slice:
 
+- `Log::close_without_retention(self)`, available in Rust `0.8.2`, consumes
+  the writer and uses the existing archive/sync/resource-release path while
+  skipping retention. Normal `close(self)` still applies its policy when
+  archiving, except for an empty strict-named file or unopened lazy writer.
+  Both methods keep chain-named empty archives and discard strict-named empty
+  active files. Subsequent writers own retention under the caller's new policy;
 - regular journal files by default and compact journal files when
   `JournalFileOptions::with_compact(true)` or `journal::Config::with_compact(true)`
   is enabled;

@@ -8,7 +8,7 @@ The normal Rust dependency is the public SDK package:
 <!-- illustrative-only: crates.io dependency declaration -->
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.8.1" }
+journal = { package = "systemd-journal-sdk", version = "0.8.2" }
 ```
 
 Use the lower-level packages only when the public package does not expose the
@@ -18,8 +18,8 @@ type you need. For example, structured directory writes currently use
 <!-- illustrative-only: crates.io dependency declaration -->
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.8.1" }
-journal_log_writer = { package = "systemd-journal-sdk-log-writer", version = "0.8.1" }
+journal = { package = "systemd-journal-sdk", version = "0.8.2" }
+journal_log_writer = { package = "systemd-journal-sdk-log-writer", version = "0.8.2" }
 ```
 
 Callers that intentionally want local-host identity can also depend on
@@ -30,7 +30,7 @@ the writer explicitly.
 <!-- illustrative-only: crates.io dependency declaration -->
 ```toml
 [dependencies]
-journal_host = { package = "systemd-journal-sdk-host", version = "0.8.1" }
+journal_host = { package = "systemd-journal-sdk-host", version = "0.8.2" }
 ```
 
 ## Read One File
@@ -294,6 +294,14 @@ rotation, explicit close, and stale-active startup archive. Latency-sensitive
 callers may set `Config::with_sync_on_archive(false)` to skip that archive-file
 sync. With the opt-out, the caller owns archived-file durability before relying
 on side indexes or allowing retention to delete archived files.
+
+Rust `0.8.2` adds `Log::close_without_retention()` for closing before a
+retention-policy change. It follows `close()`'s archive and sync path while
+skipping retention. Both methods consume the writer; construct a new writer
+with the new policy to reopen. An unopened lazy writer stays unopened, and an
+empty strict-named active file is discarded. Normal `close()` continues to
+apply its policy when archiving a file, except when discarding that empty file.
+The caller owns subsequent retention enforcement.
 
 The optional `journal_host` helper can load local-host identity for callers that
 then pass those values into `Origin` and entry timestamps explicitly. On Linux,

@@ -21,7 +21,7 @@ Use the public Rust package for normal integrations:
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.8.1" }
+journal = { package = "systemd-journal-sdk", version = "0.8.2" }
 ```
 
 The alias keeps imports short:

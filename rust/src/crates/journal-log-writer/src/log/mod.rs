@@ -587,7 +587,20 @@ impl Log {
     /// chain filename before retention, matching the explicit close behavior of
     /// the other SDK implementations. `Drop` remains best-effort for callers
     /// that do not explicitly close.
-    pub fn close(mut self) -> Result<()> {
+    pub fn close(self) -> Result<()> {
+        self.close_impl(true)
+    }
+
+    /// Archives and closes the active file without applying retention.
+    ///
+    /// Use before reopening with a changed policy. This consumes the writer
+    /// and preserves [`Self::close`]'s archive and durability behavior; the
+    /// caller owns subsequent retention enforcement.
+    pub fn close_without_retention(self) -> Result<()> {
+        self.close_impl(false)
+    }
+
+    fn close_impl(mut self, enforce_retention: bool) -> Result<()> {
         use journal_core::file::JournalState;
 
         let Some(mut active_file) = self.active_file.take() else {
@@ -624,7 +637,9 @@ impl Log {
             active_file.repository_file.clone()
         };
 
-        self.apply_retention(Some(&protected_file))?;
+        if enforce_retention {
+            self.apply_retention(Some(&protected_file))?;
+        }
 
         Ok(())
     }
@@ -1069,6 +1084,40 @@ mod tests {
             0,
             "opt-out must skip best-effort Drop archive sync"
         );
+    }
+
+    #[test]
+    fn close_without_retention_preserves_archive_sync_policy() {
+        let _guard = ARCHIVE_SYNC_TEST_LOCK.lock().expect("lock sync test");
+        for strict in [false, true] {
+            for sync in [false, true] {
+                ARCHIVE_SYNC_CALLS.store(0, Ordering::Relaxed);
+                let dir = tempfile::tempdir().expect("create temp dir");
+                let mut log = Log::new(
+                    dir.path(),
+                    test_config()
+                        .with_strict_systemd_naming(strict)
+                        .with_sync_on_archive(sync),
+                )
+                .expect("create log");
+                write_test_entry(&mut log, b"MESSAGE=close-without-retention", 1);
+                log.close_without_retention().expect("close log");
+                assert_eq!(
+                    ARCHIVE_SYNC_CALLS.load(Ordering::Relaxed),
+                    usize::from(sync)
+                );
+                let paths = journal_paths(&dir);
+                assert_eq!(paths.len(), 1);
+                let file =
+                    JournalFile::<journal_core::file::Mmap>::open_path(&paths[0], 32 * 1024 * 1024)
+                        .expect("open archive");
+                assert_eq!(file.journal_header_ref().n_entries, 1);
+                assert_eq!(
+                    file.journal_header_ref().state,
+                    journal_core::file::JournalState::Archived as u8
+                );
+            }
+        }
     }
 
     #[test]

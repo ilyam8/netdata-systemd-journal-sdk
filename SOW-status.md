@@ -35,6 +35,10 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0145-20261003-rust-close-without-retention-v0-8-2.md` - completed for
+  the PR. Rust API parity and all eight `0.8.2` package preparations pass local
+  validation and six external reviews. Authorized registry publication follows
+  merge using the procedure in the completed SOW.
 - `SOW-0144-20261003-go-v0-8-2-publication.md` - completed in PR #2 under the
   user's explicit close-out instruction. The completed record specifies paired
   tag publication and downloaded-module verification after merge.
