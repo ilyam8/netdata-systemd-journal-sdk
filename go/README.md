@@ -313,6 +313,15 @@ existing-active reopen and `LogOpenEager` enforce it during `NewLog()`, while
 lazy archived-only construction defers enforcement until the first append opens
 the active file, before the first entry is written.
 
+
+`Log.Close()` archives the active file and applies its configured retention.
+Use `Log.CloseWithoutRetention()` when closing before a policy change: it uses
+exactly the same archive/durability path but skips retention. The caller must
+reopen with the new policy or enforce retention separately. Both methods
+remove an empty active file with strict systemd naming, retain its archive with
+chain naming, and are idempotent after closure; calling `Close()`
+after `CloseWithoutRetention()` does not retroactively apply the old policy.
+
 `EntryOptions.SourceRealtimeUsec` injects `_SOURCE_REALTIME_TIMESTAMP` when the
 source timestamp differs from the journal entry timestamp. `Log.Append` clamps
 non-progressing realtime and monotonic overrides forward to preserve strict

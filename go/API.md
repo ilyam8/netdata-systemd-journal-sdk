@@ -28,6 +28,7 @@ should require a new minor release tag and an explicit SOW decision:
 - `(*journal.Log).AppendMapWithOptions`
 - `(*journal.Log).Sync`
 - `(*journal.Log).Close`
+- `(*journal.Log).CloseWithoutRetention`
 - `(*journal.Log).EnforceRetention`
 - `(*journal.Log).ConfiguredDirectory`
 - `(*journal.Log).JournalDirectory`
@@ -261,6 +262,15 @@ Retention is also applied once when an active writer is opened or created.
 Existing-active reopen and `LogOpenEager` enforce retention during `NewLog`.
 Lazy archived-only construction remains side-effect-free until the first
 append opens the active file; retention then runs before the entry is written.
+
+
+`Log.Close()` archives the active file and applies its configured retention.
+Use `Log.CloseWithoutRetention()` when closing before a policy change: it uses
+exactly the same archive/durability path but skips retention. The caller must
+reopen with the new policy or enforce retention separately. Both methods
+remove an empty active file with strict systemd naming, retain its archive with
+chain naming, and are idempotent after closure; calling `Close()`
+after `CloseWithoutRetention()` does not retroactively apply the old policy.
 
 ## Lifecycle And Artifact Accounting
 

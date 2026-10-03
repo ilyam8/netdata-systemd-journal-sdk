@@ -1,10 +1,10 @@
 # SOW Status
 
-Last updated: 2026-08-12
+Last updated: 2026-10-03
 
 ## Current
 
-- None.
+- SOW-0142 - Go Close Without Retention: in-progress. User-approved additive Go API for consumer retention-policy changes; no release authorized.
 
 ## Pending
 

@@ -151,6 +151,15 @@ Use explicit size and duration limits for production backends. The SDK derives
 systemd-like file-size defaults from retention envelopes when supported by the
 language implementation, with a one-twentieth rotation step by default.
 
+
+`Log.Close()` archives the active file and applies its configured retention.
+Use `Log.CloseWithoutRetention()` when closing before a policy change: it uses
+exactly the same archive/durability path but skips retention. The caller must
+reopen with the new policy or enforce retention separately. Both methods
+remove an empty active file with strict systemd naming, retain its archive with
+chain naming, and are idempotent after closure; calling `Close()`
+after `CloseWithoutRetention()` does not retroactively apply the old policy.
+
 ## Identity And Locking
 
 Core writers do not discover host identity. Pass machine ID, boot ID, and

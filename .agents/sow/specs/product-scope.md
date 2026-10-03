@@ -392,7 +392,13 @@ Current Go writer feature slice:
   retention. The tracked active/current file counts toward retention envelopes
   but is never selected for deletion to satisfy retention limits. Unset limits
   are disabled; explicitly enabled zero or negative limits fail construction.
-  `EnforceRetention()` applies retention without requiring a rotation or close;
+  `EnforceRetention()` applies retention without requiring a rotation or close.
+  Go `CloseWithoutRetention()` archives/releases the current file with the normal
+  durability path but skips retention, allowing a caller to reopen with a changed
+  policy without applying stale limits. The caller owns subsequent enforcement;
+  normal `Close()` still applies its configured policy. Both are idempotent;
+  empty active files are removed with strict systemd naming and archived with
+  chain naming;
 - high-level Go directory writer construction supports lazy open by default and
   eager active-file open through `LogOpenEager`, so integrations can validate
   file creation/open and writer options before accepting work;

@@ -410,6 +410,15 @@ skip that archive-file sync. With the opt-out, the caller owns archived-file
 durability before relying on side indexes or allowing retention to delete
 archived files.
 
+
+`Log.Close()` archives the active file and applies its configured retention.
+Use `Log.CloseWithoutRetention()` when closing before a policy change: it uses
+exactly the same archive/durability path but skips retention. The caller must
+reopen with the new policy or enforce retention separately. Both methods
+remove an empty active file with strict systemd naming, retain its archive with
+chain naming, and are idempotent after closure; calling `Close()`
+after `CloseWithoutRetention()` does not retroactively apply the old policy.
+
 ## Field-Name Policy
 
 <!-- verify-example: lang=go id=go-field-name-policy -->
