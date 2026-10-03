@@ -42,6 +42,10 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
   docs, Go `1.26.2` race tests, a CGO-disabled retention-reload consumer,
   17 Go documentation examples, and wiki/SOW checks pass. Tag publication
   remains tracked by SOW-0144 after PR merge.
+- `SOW-0142-20261003-go-close-without-retention.md` - completed and merged
+  through PR #1 at `777ca98f40eeb3289673ae6d069aba6c372c50b7`. The new Go
+  API passed full race/vet, documentation validation, and independent review.
+  SDK release preparation/publication are tracked by SOW-0143 and SOW-0144.
 - `SOW-0093-20260605-netdata-function-boundary-reader-comparison.md` -
   completed again after correcting the Rust/Go synthetic timestamp filter.
   Coordinated `0.8.1` is public from

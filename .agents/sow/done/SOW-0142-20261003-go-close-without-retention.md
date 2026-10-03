@@ -3,7 +3,10 @@
 ## Status
 
 Status: completed
-Sub-state: additive Go API implemented in fbb8235, fully locally validated and independently reviewed. No push or release.
+Sub-state: additive Go API implemented in fbb8235, validated, reviewed, and
+merged through PR #1 at 777ca98f40eeb3289673ae6d069aba6c372c50b7. API work is
+complete; release preparation and publication are tracked by SOW-0143 and
+SOW-0144 respectively.
 
 ## Requirements
 
@@ -86,6 +89,13 @@ Main implements SDK files. Independent reviewer must be read-only, no child agen
 ### 2026-10-03
 
 - Existing source clone clean on master at ac43b6c; created isolated feat/dem-retention-close worktree. User approval recorded before source edits. Temporary reference clone was not used for implementation.
+- PR #1 merged at 777ca98f40eeb3289673ae6d069aba6c372c50b7 after final review.
+  Its tree matches reviewed head b749e5c409dda6bd424b254ced694bc47e15f96d.
+- The user subsequently authorized Go v0.8.2 through a release PR. SOW-0143
+  completes preparation in PR #2; pending SOW-0144 owns post-merge publication.
+- Reconciled the completed API status in this record and both status summaries.
+  This correction changes tracking only; runtime validation remains the
+  accepted implementation evidence, with SOW audit and whitespace checks rerun.
 
 ## Validation
 
@@ -99,7 +109,11 @@ Follow-up mapping: SDK publication/version pin is consumer delivery sequencing a
 
 ## Outcome
 
-Additive Go API complete and reviewed locally. No verified blocker remains; full Go race/vet, Go docs examples and wiki validator pass. No format/append path changed or new stock-systemd certification claimed. Consumer adoption/version publication remains separate authorized delivery sequencing, not an unfinished API item.
+Additive Go API complete, reviewed, and merged through PR #1. No verified
+blocker remains; full Go race/vet, Go docs examples and wiki validator pass.
+No format/append path changed or new stock-systemd certification claimed.
+Version publication is tracked separately in SOW-0144 after release PR #2
+merges; it is not unfinished API work.
 
 ## Lessons Extracted
 
@@ -107,7 +121,10 @@ Consumer reconfiguration must use explicit SDK contracts rather than shallow pol
 
 ## Followup
 
-Release/pin sequencing is tracked in the consuming DEM initiative Q17; no new SDK release task is inferred.
+The subsequent authorized SDK release is tracked by completed
+`SOW-0143-20261003-go-v0-8-2-release.md` and pending
+`SOW-0144-20261003-go-v0-8-2-publication.md`. Consumer adoption remains in the
+consuming DEM initiative Q17.
 
 ## Regression Log
 

@@ -52,7 +52,11 @@ Last updated: 2026-10-03
   close semantics are updated, full Go race tests and a CGO-disabled consumer
   pass on Go `1.26.2`, and all 17 Go doc examples plus wiki/SOW checks pass.
   Publication is tracked by pending SOW-0144 after the release PR merges.
-- SOW-0142 - Go Close Without Retention: completed. Additive CloseWithoutRetention API implemented in fbb8235, full Go race/vet and documentation checks passed, independent Astra review found no blocker. No release or push authorized.
+- SOW-0142 - Go Close Without Retention: completed and merged through PR #1
+  at `777ca98f40eeb3289673ae6d069aba6c372c50b7`. Additive
+  `CloseWithoutRetention()` API, full Go race/vet, documentation validation,
+  and independent review passed. Release preparation is completed in
+  SOW-0143; post-merge publication remains tracked by SOW-0144.
 
 - SOW-0093 - Netdata Function Boundary Reader Comparison: completed again
   after correcting the synthetic timestamp filter metadata in Rust and Go.
