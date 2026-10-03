@@ -11,7 +11,7 @@ alias if existing code should import it as `journal`:
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.8.1" }
+journal = { package = "systemd-journal-sdk", version = "0.8.2" }
 ```
 
 The workspace also publishes project-prefixed lower-level packages for
@@ -311,6 +311,11 @@ Call `Log::enforce_retention()` to apply age/count/byte retention without
 waiting for another append-triggered rotation or close. Call `Log::close()` to
 archive the current file and enforce retention; `Drop` only performs best-effort
 state persistence.
+Rust `0.8.2` adds `Log::close_without_retention()` for closing before reopening
+with a changed retention policy. It follows the same archive and sync path as
+`close()` and skips retention. Both methods consume the writer, discard an
+empty strict-named active file, and leave an unopened lazy writer unopened.
+The caller owns retention enforcement on subsequent writers.
 Retention also runs once when a writer opens or creates the active file:
 existing-active reopen and `LogOpenMode::Eager` enforce it during construction,
 while lazy archived-only construction defers enforcement until the first append

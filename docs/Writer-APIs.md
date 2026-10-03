@@ -161,6 +161,14 @@ remove an empty active file with strict systemd naming, retain its archive with
 chain naming, and are idempotent after closure; calling `Close()`
 after `CloseWithoutRetention()` does not retroactively apply the old policy.
 
+Rust `0.8.2` provides `Log::close_without_retention()` for the same policy
+handoff. It shares `Log::close()`'s archive and sync path, skips retention,
+and consumes the writer. Both Rust methods leave an unopened lazy writer
+unopened and discard an empty strict-named active file; chain naming keeps
+its empty archive. Construct a new writer with the intended policy for
+subsequent retention enforcement. Normal Rust `close()` keeps applying its
+policy when archiving a file, except when discarding an empty strict-named file.
+
 ## Identity And Locking
 
 Core writers do not discover host identity. Pass machine ID, boot ID, and
