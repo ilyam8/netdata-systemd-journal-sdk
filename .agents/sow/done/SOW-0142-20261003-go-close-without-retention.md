@@ -2,8 +2,8 @@
 
 ## Status
 
-Status: in-progress
-Sub-state: user-approved additive Go API prerequisite for DEM policy reload; local implementation/validation/review only, no push or release.
+Status: completed
+Sub-state: additive Go API implemented in fbb8235, fully locally validated and independently reviewed. No push or release.
 
 ## Requirements
 
@@ -89,17 +89,17 @@ Main implements SDK files. Independent reviewer must be read-only, no child agen
 
 ## Validation
 
-API implemented; final-file-state full Go race suite and vet PASS. Wiki validator (15 pages), all 17 Go wiki examples, diff whitespace and local SOW audit PASS. Initial full race suite caught an incorrect new empty-chain test expectation; test/docs now preserve existing Close behavior. Actual synthetic fixtures prove expired archives survive no-retention close, relaxed reopen preserves them and tighter reopen removes them; strict/chain archive state, lazy/eager/idempotence and archive-failure retry pass. Independent review remains required; no readiness claim before review.
+API implemented; final-file-state full Go race suite and vet PASS. Wiki validator (15 pages), all 17 Go wiki examples, diff whitespace and local SOW audit PASS. Initial full race suite caught an incorrect new empty-chain test expectation; test/docs now preserve existing Close behavior. Actual synthetic fixtures prove expired archives survive no-retention close, relaxed reopen preserves them and tighter reopen removes them; strict/chain archive state, lazy/eager/idempotence and archive-failure retry pass. Independent Astra medium read-only review of ac43b6c..fbb8235 found no verified blocker and independently passed focused race close/retention tests. Optional real-time fixture robustness suggestion is non-blocking: the test intentionally models expiry with a short SDK policy and proves the pre-expiry fixture before waiting; no runtime clock injection is introduced solely for this cold API test.
 Sensitive data gate:
 
 - Synthetic source scope, no sensitive material recorded.
 Same-failure scan: no documented setter or close-without-retention exists; old Close must retain its normal policy behavior.
-Artifact maintenance gate: docs/spec updates planned above; no new workflow or external skills. Completion audit/status and review remain required.
+Artifact maintenance gate: Go README/API and two wiki pages updated; product-scope updated. AGENTS and project skills unchanged because the existing workflow remains valid; no output/reference skills exist. User-directed pre-review implementation commit fbb8235 is retained; reviewed lifecycle completion and queue move are committed separately under the higher-priority commit-before-review instruction. Audit and whitespace passed; status/directory checked after the move. No independent cleanup or release bundled.
 Follow-up mapping: SDK publication/version pin is consumer delivery sequencing and is not authorized by this SOW; DEM local SOW Q17 tracks it. No SDK release is bundled.
 
 ## Outcome
 
-Implementation in progress; no external publication.
+Additive Go API complete and reviewed locally. No verified blocker remains; full Go race/vet, Go docs examples and wiki validator pass. No format/append path changed or new stock-systemd certification claimed. Consumer adoption/version publication remains separate authorized delivery sequencing, not an unfinished API item.
 
 ## Lessons Extracted
 
