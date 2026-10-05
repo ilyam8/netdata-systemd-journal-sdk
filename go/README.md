@@ -483,3 +483,12 @@ inputs:
 go run ./cmd/journalctl --directory ./journals --boot=all --since @1700000000 --until @1700003600
 go run ./cmd/journalctl --file ./active.journal --follow --no-tail --boot=all
 ```
+
+## Unreleased indexed snapshots
+
+The source tree adds bounded `IndexedSnapshot` traversal and strict offline index
+verification for uncertain files. See [Indexed snapshots](../docs/Indexed-Snapshots.md)
+for API examples, caller exclusion, borrowed payloads and recovery costs. Mutating
+writer failures now prevent further mutation and preserve uncertain files during
+cleanup. These additions are not included in the previously published versions
+listed above.

@@ -203,6 +203,8 @@ fn write_test_bytes_at(file: &mut std::fs::File, bytes: &[u8], offset: u64) -> s
 
 fn zstd_writer(threshold: usize) -> JournalWriter {
     JournalWriter {
+        poisoned: false,
+        fail_append_stage: 0,
         tail_object_offset: NonZeroU64::new(8).unwrap(),
         append_offset: NonZeroU64::new(16).unwrap(),
         next_seqnum: 1,
@@ -978,4 +980,38 @@ fn writer_initial_arena_covers_large_hash_tables() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[test]
+fn all_mutating_append_stages_poison_writer_and_block_retry() {
+    for compact in [false, true] {
+        for stage in 1..=4 {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("failure.journal");
+            let repository = crate::repository::File::from_path(&path).unwrap();
+            let mut file = JournalFile::create(
+                &repository,
+                JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3))
+                    .with_compact(compact),
+            )
+            .unwrap();
+            let mut writer = JournalWriter::new(&mut file, 1, test_uuid(2)).unwrap();
+            writer.fail_append_stage = stage;
+            assert!(
+                writer
+                    .add_entry(&mut file, &[b"MESSAGE=value"], 1_000_000, 1)
+                    .is_err()
+            );
+            assert!(writer.is_poisoned());
+            let before = std::fs::read(&path).unwrap();
+            writer.fail_append_stage = 0;
+            assert!(matches!(
+                writer.add_entry(&mut file, &[b"MESSAGE=retry"], 2_000_000, 2),
+                Err(JournalError::WriterPoisoned)
+            ));
+            drop(writer);
+            drop(file);
+            assert_eq!(before, std::fs::read(path).unwrap());
+        }
+    }
 }

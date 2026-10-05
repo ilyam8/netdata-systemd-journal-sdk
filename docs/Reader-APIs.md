@@ -7,6 +7,7 @@ consumer problem and carries a different cost.
 
 | Consumer Need | Rust | Go | Use This When |
 |---|---|---|---|
+| committed native postings | `IndexedSnapshot` | `IndexedSnapshot` | fixed population without eager entry offsets; see [[Indexed-Snapshots]] |
 | one file, scan rows | `FileReader` | `Reader` | caller owns file ordering |
 | many files, journal order | `DirectoryReader` | `DirectoryReader` | directory behaves like file-backed `journalctl` |
 | immediate payload callback | `visit_entry_payloads` | `VisitEntryPayloads` | callback can process `FIELD=value` bytes |
@@ -65,8 +66,8 @@ Performance rules:
 - use field and unique APIs for index-backed metadata queries;
 - use full entry maps only for rows that will be returned or displayed.
 - use verifier APIs only for integrity checks; file-path verification is
-  bounded, but it still performs object-graph and sealed TAG/HMAC work that is
-  not part of the query hot path.
+  separate from query opening. Strict index certification has graph-sized
+  time and memory costs; sealed TAG/HMAC authentication is a separate check.
 
 ## Directory Reader
 

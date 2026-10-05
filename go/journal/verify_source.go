@@ -1,6 +1,7 @@
 package journal
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 )
@@ -86,4 +87,43 @@ func verifySourceHeader(source verifyByteSource) (journalHeader, error) {
 
 func verifySourceHasHeaderField(source verifyByteSource, headerSize uint64, end int) bool {
 	return headerSize >= uint64(end) && source.Len() >= uint64(end)
+}
+
+// indexVerifySource amortizes scalar parsing without retaining the whole file.
+// A refill allocates a new window so previously returned payload slices remain
+// valid until their caller finishes hashing them.
+type indexVerifySource struct {
+	reader *Reader
+	ctx    context.Context
+	base   uint64
+	window []byte
+}
+
+func (s *indexVerifySource) Len() uint64 { return s.reader.fileSize }
+
+func (s *indexVerifySource) Slice(offset, size uint64) ([]byte, error) {
+	if err := s.ctx.Err(); err != nil {
+		return nil, err
+	}
+	end, ok := checkedAdd(offset, size)
+	if !ok || end > s.Len() {
+		return nil, fmt.Errorf("verification read exceeds file bounds")
+	}
+	if offset >= s.base && end-s.base <= uint64(len(s.window)) {
+		return s.window[offset-s.base : end-s.base], nil
+	}
+	const windowSize = 256 * 1024
+	base := offset - offset%windowSize
+	length := minUint64(windowSize, s.Len()-base)
+	if end-base > length {
+		// Unusually large objects get their own read, leaving the scalar window in
+		// place for their headers. This avoids copying the same large payload twice.
+		return (readerVerifySource{reader: s.reader}).Slice(offset, size)
+	}
+	window := make([]byte, int(length))
+	if err := s.reader.readAt(window, base); err != nil {
+		return nil, err
+	}
+	s.base, s.window = base, window
+	return window[offset-base : end-base], nil
 }

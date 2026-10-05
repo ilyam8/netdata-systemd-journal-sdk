@@ -718,6 +718,17 @@ impl<B: SplitByteSliceMut> JournalObjectMut<B> for DataObject<B> {
 }
 
 impl<B: ByteSlice> DataObject<B> {
+    #[doc(hidden)]
+    pub fn tail_entry_array_hint(&self) -> Option<(u32, u32)> {
+        match &self.payload {
+            DataPayloadType::Compact { compact_fields, .. } => Some((
+                compact_fields.tail_entry_array_offset,
+                compact_fields.tail_entry_array_n_entries,
+            )),
+            DataPayloadType::Regular(_) => None,
+        }
+    }
+
     pub fn raw_payload(&self) -> &[u8] {
         match &self.payload {
             DataPayloadType::Regular(payload) => payload,

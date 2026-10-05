@@ -915,3 +915,40 @@ fn update_hmac_range(
     }
     Ok(())
 }
+
+/// Strict native-index integrity verification before reusing uncertain files.
+///
+/// Requires caller exclusion of writers. Validates all global, DATA, FIELD,
+/// hash and reverse links, including the last entry, in expected O(objects +
+/// references + payload bytes) work. Uses O(objects + references) temporary
+/// memory. Does not authenticate sealed files; use key verification separately.
+/// Whole-file `.journal.zst` inputs incur full-file staging cost.
+pub fn verify_index(path: impl AsRef<Path>, control: &SnapshotControl<'_>) -> Result<()> {
+    control.check()?;
+    let reader = FileReader::open_with_options(path, ReaderOptions::snapshot())?;
+    reader.inner.with_file(|file| {
+        struct ControlledSource<'a, 'b> {
+            source: JournalFileVerifySource<'a>,
+            control: &'a SnapshotControl<'b>,
+        }
+        impl ByteSource for ControlledSource<'_, '_> {
+            fn len(&self) -> u64 {
+                self.source.len()
+            }
+            fn check(&self) -> std::result::Result<(), String> {
+                self.control.check().map_err(|err| err.to_string())
+            }
+            fn read_vec(&self, offset: u64, size: u64) -> std::result::Result<Vec<u8>, String> {
+                self.control.check().map_err(|err| err.to_string())?;
+                self.source.read_vec(offset, size)
+            }
+        }
+        let source = ControlledSource {
+            source: JournalFileVerifySource::new(file)?,
+            control,
+        };
+        let result = verify_graph::verify_index_source(&source);
+        control.check()?;
+        result.map_err(SdkError::VerificationError)
+    })
+}

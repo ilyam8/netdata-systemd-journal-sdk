@@ -57,6 +57,20 @@ Direct append-open is not a promise to mutate arbitrary historical or
 systemd-created files. Unsupported append targets must fail before entry
 mutation.
 
+## Uncertain Failures And Reopen
+
+A mutating append, sync or archive failure poisons the writer. Further mutation
+is rejected. Close/drop releases resources without rewriting metadata, applying
+retention or deleting an uncertain file, including a failed first append whose
+cached entry count is zero. Pre-mutation input validation errors remain reusable.
+Go exposes `ErrWriterFailed` and preserves the original cause.
+
+Append-open validates supported format metadata; it does not certify the full
+native index graph. Before a `Writer` or `Log` can reuse uncertain files, exclude
+writers and run strict `VerifyIndex`/`verify_index`. Failure leaves evidence
+intact. See [[Indexed-Snapshots|Indexed snapshots and recovery]] for the stronger
+integrity contract and its offline cost.
+
 ## Structured Append
 
 Structured append is the production hot path when the producer already has

@@ -64,6 +64,7 @@ presents less. The layers below explain what each surface costs.
 
 | Surface | Best For | Performance Notes |
 |---|---|---|
+| indexed snapshot | committed native postings and FIELD predicates | bounded capture and lazy traversal; caller excludes writes during capture; see [[Indexed-Snapshots]] |
 | payload visitor | scanning current-row `FIELD=value` bytes | avoids maps and copies uncompressed mmap data where the language can expose that path; Go `VisitEntryPayloads` is callback-scoped |
 | file reader | one journal file with cursor, matches, metadata, fields | flexible, but full entry materialization is not the fastest path |
 | directory reader | ordered reads across active and archived files | merges files in journal order |

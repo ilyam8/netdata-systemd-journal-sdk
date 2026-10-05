@@ -640,6 +640,7 @@ fn enumerate_file_fields(reader: &mut FileReader) -> crate::Result<Vec<String>> 
 fn map_error(err: SdkError) -> Error {
     match err {
         SdkError::NoEntry => Error::NoEntry,
+        SdkError::Cancelled => Error::Other("operation cancelled".into()),
         SdkError::InvalidCursor(_) => Error::InvalidCursor,
         SdkError::Unsupported(_) => Error::Unsupported,
         SdkError::DecompressionFailed(msg) => Error::Other(msg),

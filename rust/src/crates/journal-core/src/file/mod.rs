@@ -58,5 +58,7 @@ pub(crate) use object::*;
 
 // Re-export DataObject for journal-index
 pub use object::DataObject;
+#[doc(hidden)]
+pub use object::{HashTable, JournalHeader};
 
 pub type JournalFileMap = JournalFile<Mmap>;

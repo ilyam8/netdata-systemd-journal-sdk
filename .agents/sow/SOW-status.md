@@ -1,12 +1,13 @@
 # SOW Status
 
-Last updated: 2026-10-03
+Last updated: 2026-10-06
 
 ## Current
 
-- None.
+- SOW-0147 - Indexed Snapshots For Domain History: in progress; option 1 recovery policy and prerequisite fixes explicitly approved. Go/Rust writer safety, efficient strict verification and bounded index snapshots.
 
 ## Pending
+
 
 - SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
   follow-up analysis for remaining global ENTRY-array and regular/fallback DATA

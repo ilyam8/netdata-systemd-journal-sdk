@@ -392,7 +392,10 @@ impl OwnedChain {
         Ok(file)
     }
 
-    pub(super) fn archive_existing_active_file(&mut self) -> Result<Option<repository::File>> {
+    pub(super) fn archive_existing_active_file(
+        &mut self,
+        sync_on_archive: bool,
+    ) -> Result<Option<repository::File>> {
         let Some(file) = self.inner.back().filter(|file| file.is_active()).cloned() else {
             return Ok(None);
         };
@@ -419,6 +422,15 @@ impl OwnedChain {
             return Ok(None);
         }
 
+        // An earlier process may have failed its final sync. Do not establish
+        // archive provenance by rename until this file has been synchronized.
+        if sync_on_archive {
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(file.path())?
+                .sync_all()?;
+        }
         self.archive_file(&file, seqnum_id, head_seqnum, head_realtime)
             .map(Some)
     }

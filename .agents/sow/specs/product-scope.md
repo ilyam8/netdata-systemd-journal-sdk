@@ -1083,3 +1083,21 @@ The only write exception outside the repository is `/tmp`. Prefer `.local/` insi
 ## Open Questions
 
 None currently blocking bootstrap. Implementation-phase SOWs may expose narrower decisions and must record them before coding starts.
+
+## Indexed Snapshot And Recovery Contract
+
+Go and Rust MUST provide the additive IndexedSnapshot surface documented in
+`docs/Indexed-Snapshots.md`. Capture freezes committed population bounds, declared
+FIELD heads and exact-value counts under caller-owned writer exclusion. Traversal
+MUST use native indexes and bounded chunks without eager O(entries) offset lists;
+FIELD predicates expose posting multiplicity rather than implicit union semantics.
+Callbacks MUST honor borrowed payload lifetimes and cooperative cancellation.
+Historical/layout/compression support is shared with existing readers.
+
+Strict VerifyIndex/verify_index MUST certify full bidirectional native index
+membership before uncertain files are reused; the compatibility verifier remains
+separate. This offline check has graph-sized time and memory, not query-open cost.
+Mutating errors MUST poison writers. Cleanup MUST preserve uncertain files without
+clean-state publication, archival retries, empty-file deletion or retention.
+Pre-mutation validation errors MUST remain reusable. Open itself MUST NOT silently
+incur a full strict verification pass. Applications own recovery/provenance policy.

@@ -3,6 +3,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum JournalError {
+    #[error("writer poisoned after uncertain mutation")]
+    WriterPoisoned,
+
     #[error("invalid magic number")]
     InvalidMagicNumber,
 
