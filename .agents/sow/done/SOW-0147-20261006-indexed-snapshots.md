@@ -2,8 +2,8 @@
 
 ## Status
 
-Status: in-progress
-Sub-state: user approved option 1 and prerequisite SDK fixes on 2026-10-06. Implementing Go/Rust writer failure safety, efficient strict verification and bounded indexed snapshots. SDK-first delivery; no publication authorized.
+Status: completed
+Sub-state: SDK prerequisite complete and independently reviewed. Local implementation 501fd32 and validated review fixes cd0dfaf. Publication remains separate; consumer adoption is Netdata step12.
 
 ## Requirements
 
@@ -49,7 +49,7 @@ Sources checked:
 
 Current state:
 - Separate worktree/branch feat/indexed-snapshot starts at local master 8ad648a7b4d36bf2d75ee6ee98b42446ff64a276. Experiment branch remains intact.
-- Go/Rust source, public docs, verified examples and current-contract spec are implemented. Validation evidence is below; independent implementation review remains required. Scratch remains under /tmp or .local/.
+- Go/Rust source, public docs, verified examples and current-contract spec are implemented. Validation evidence is below; independent implementation review is complete. Scratch remains under /tmp or .local/.
 
 Risks:
 - Callback mapping lifetime, mutable FIELD/posting structures, older header metadata and interrupted publication interact. Frozen file size alone is insufficient.
@@ -149,7 +149,7 @@ Failure handling:
 ## Validation
 
 Acceptance criteria evidence:
-- APIs and approved lifecycle implemented in Go/Rust. Independent implementation review remains pending; no release or DEM integration claim.
+- APIs and approved lifecycle implemented in Go/Rust. Independent implementation review and focused correction checks are complete; no release or DEM integration claim.
 
 Tests or equivalent validation:
 - Original modeled interruption evidence remains valid as root-cause evidence. New writer failure and strict-verifier regressions reproduce failing-before cases, including missing final reverse links, zero-reference DATA and failed first-append cleanup.
@@ -159,17 +159,19 @@ Real-use evidence:
 - Completed spike uses actual SDK writes/reads at 949 MB; production DEM integration remains future step12 validation, not established here.
 
 Reviewer findings:
-- Callback/lifetime surface and DEM selected populations accepted. Publication-boundary and crash-reopen integrity finding accepted and reproduced; recovery policy is now approved and its regression belongs in implementation acceptance.
+- Two fresh Astra reviewers independently assessed Go snapshot/index/lifecycle and Rust/parity after commit 501fd32. Accepted and reproduced: strict Go FIELD chain order mismatch, historical header boot/monotonic mismatch in both snapshots, and Rust hash tables outside the committed object graph. Main also corrected a matching Go FIELD with missing DATA head being reported as absence. New regression tests failed before source fixes and pass after cd0dfaf.
+- Focused independent confirmation on cd0dfaf found no remaining blockers in either scope. Snapshot clipping proof holds under valid graph, capture exclusion and append-only guarantees. Existing broader coverage remains valid. No optional style/coverage suggestion extended the cycle.
+- One focused-review tool attempt failed an automated content classification; the same ordinary file-format review completed after a concise restatement, without changing scope or performing a restricted action.
 
 Same-failure scan:
-- Traced Go and Rust append publication, Go append-open, Log error propagation and archive ordering; both writer families require their affected paths in implementation verification.
+- Traced Go and Rust append publication, Go append-open, Log error propagation and archive ordering; affected paths are covered by failure preservation tests. Rechecked historical header feature flags and walked-table provenance in both implementations.
 
 Sensitive data gate:
 - Public source and synthetic journal data only. No private telemetry or credentials in tracked artifacts.
 
 Artifact maintenance gate:
 - AGENTS.md and runtime skills unchanged. Public snapshot/recovery documentation, executable Go/Rust examples, product-scope spec and validation report carry the delivered contract.
-- No output/reference skills exist. SOW is in-progress/current after user approval and status summary records it.
+- No output/reference skills exist. SOW is completed/done after review and validation; status summary records it.
 
 Specs update:
 - product-scope records additive snapshot and strict recovery invariants.
@@ -189,18 +191,26 @@ Lessons:
 Follow-up mapping:
 - SDK prerequisite remains this SOW. Consumer adoption remains Netdata SOW-20261005-dem-framework-12-history-time; Cloud remains final step04. Existing operator/clock pending SOWs are separate, unchanged.
 
+Reference reconciliation:
+- `rg -n 'RotationRetriesAfterArchiveCleanupFailure|retry.*archive|retry.*rotation|restoreErr' go rust docs` returned no remaining references to the retired archive retry/rollback behavior.
+- `rg -n 'archive_existing_active_file|ErrWriterFailed|is_poisoned|archiveTo\(' go/journal rust/src/crates/journal-log-writer/src/log rust/src/crates/journal-core/src/file/writer.rs` returned 31 owner/test references. All are intentionally retained lifecycle entry points, error guards or regression expectations; no compatibility retry path remains.
+- SDK reader/facade/Explorer surfaces remain intentionally retained with their original contracts. New APIs are additive. DEM schema/naming/query migration and Cloud remain the explicitly staged consumer work, not missing SDK cleanup.
+
 Additional implementation evidence:
+- After review fixes, Go snapshot/all-verifier race checks pass (9.38 s), final Go vet passes, all 10 Rust snapshot tests independently pass, and final Rust public suite passes 142 tests with the two baseline platform failures filtered.
+- Both public Go/Rust APIs strictly verify and traverse exact/FIELD/global indexes in all seven Go/Rust documentation writer fixtures. Log .local/indexed-snapshot-cross-language.log. This adds cross-language snapshot evidence to the stock closed-file checks.
+- Same mixed250kfixture Go metadata-only probe: capture116.5us, exact2496postings209.7us, FIELD2.717ms, lazyglobal11.464ms. Results agree with Rust counts; timings are warm one-shot measurements, not a ranking.
 - Full Go module tests and vet pass. Full journal race suite passed (25.7 s), then focused snapshot/strict verifier race tests passed after bounded capture refinements (5.2 s). All supported DATA compression/layout/access modes, historical unkeyed whole-file fixture, binary names, callback errors/cancellation and concurrent first-array growth are covered.
-- Rust core 81, directory writer 9, public SDK 140 pass; two preexisting macOS wheel/root expectations are excluded after baseline reproduction. Shared conformance adapter 15/15 passes. Final logs are /tmp/dem-sdk-rust-final-tests.log and /tmp/dem-sdk-rust-conformance.json.
+- Rust core 81, directory writer 9, public SDK 142 pass; two preexisting macOS wheel/root expectations are excluded after baseline reproduction. Shared conformance adapter 15/15 passes. Initial core/writer/conformance logs are /tmp/dem-sdk-rust-final-tests.log and /tmp/dem-sdk-rust-conformance.json; the final public-suite log is .local/indexed-snapshot-rust-final.log (142 pass, 2 baseline failures filtered).
 - Wiki structure validates; 78 harness tests and all 33 marked Go/Rust examples pass. Initial offline cache miss was resolved by copying existing task-local registry cache; no source dependency/version changed.
 - Stock systemd 257.13 in a disposable container verifies all seven generated Go/Rust documentation journals. Read-only synthetic mounts only; no host journal or service accessed. This is closed-file verification, not a new Linux live-reader parity claim.
-- Go 100k-row collision-heavy snapshot benchmark (six runs): capture median28.1us/12,344B, exact100-row payload traversal includingopen205us/12,456B, FIELD392.5us, all100kpayloads13.31ms/12,608B; eageropen2.195ms/5,155,297B. No cold-cache claim.
+- Go 100k-row collision-heavy snapshot benchmark (six runs): capture median28.1us/12,344B, exact100-row payload traversal includingopen205us/12,456B, FIELD392.5us, all 100kpayloads13.31ms/12,608B; eageropen2.195ms/5,155,297B. No cold-cache claim.
 - Mixed250kfixture strict verification: Go1.04s/681.6MB cumulative allocations/~494MB process-treepeakRSS; Rust1.64s/~537MB childpeakRSS after cursor optimization. These are offline graph-sized costs, not query-open costs. Rust capture97us, exact2496postings265us, FIELD2.645ms, lazyglobal10.949ms; metadata-only visits differ from Go100kpayload workload.
 - Six alternating30krow Go writer trials: baseline143.3ms, changed146.2ms median (~2.0% difference; overlapping ranges). Same mixed32-field structured append, compact layout, defaultlivepublication. No broad speedup/regression claim from this noisy small difference.
 
 ## Outcome
 
-Implementation in progress under explicit option-1 approval; no readiness claim.
+SDK prerequisite is ready for review/release. All in-scope code, tests and documentation are committed locally, and verified review blockers are resolved. No source change or final dependency pin is claimed for DEM yet.
 
 ## Lessons Extracted
 
@@ -208,7 +218,7 @@ Cheap capture consistency checks do not certify arbitrary interrupted graphs. Av
 
 ## Followup
 
-Execute the approved recovery policy and SDK prerequisite before consumer adoption. No extra untracked implementation is deferred.
+Publish the reviewed SDK version through the user-owned release workflow, then execute Netdata step12 adoption. This is the approved staged boundary; no SDK implementation is deferred and no remote action is authorized.
 
 ## Regression Log
 

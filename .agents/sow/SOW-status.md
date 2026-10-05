@@ -4,7 +4,7 @@ Last updated: 2026-10-06
 
 ## Current
 
-- SOW-0147 - Indexed Snapshots For Domain History: in progress; option 1 recovery policy and prerequisite fixes explicitly approved. Go/Rust writer safety, efficient strict verification and bounded index snapshots.
+- None.
 
 ## Pending
 
@@ -45,6 +45,8 @@ Last updated: 2026-10-06
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
+
+- SOW-0147 - Indexed Snapshots For Domain History: complete. Go/Rust bounded snapshots, strict index verification and failure-preserving writer lifecycle; local commits 501fd32/cd0dfaf, independent review and focused fixes complete. SDK publication and Netdata adoption remain separate.
 
 - SOW-0145 - Rust Close Without Retention And v0.8.2: completed and published.
   All eight Rust `0.8.2` crates are indexed and non-yanked from merged PR #3

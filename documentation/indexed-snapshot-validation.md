@@ -9,7 +9,7 @@ Go 1.27.1 and Rust 1.91. No OS cache flush was performed.
 
 - Full Go module tests and vet pass. The full journal race suite passes; focused
   snapshot/verification race tests also pass after the final capture checks.
-- Rust core: 81 tests; directory writer: 9; public SDK: 140. Two existing macOS
+- Rust core: 81 tests; directory writer: 9; public SDK: 142. Two existing macOS
   group-name tests expect `root` where the host resolves `wheel`; both failures
   were reproduced on the unchanged baseline and excluded from the focused run.
 - The Rust shared conformance adapter passes all 15 scenarios. Both languages
@@ -92,3 +92,19 @@ median append times of 143.3 ms before and 146.2 ms after the lifecycle fix
 (about 2.0%, overlapping ranges). These trials do not establish a broad
 performance regression or improvement. Successful writes retain the same
 format/publication path; failure handling adds the failed-state guard.
+
+## Independent review close-out
+
+Two independent reviewers assessed Go index/lifecycle behavior and Rust/parity.
+Review fixes in `cd0dfaf` enforce Go FIELD chain order, gate historical tail boot/
+monotonic comparisons on the format compatibility flag, and require Rust hash
+tables to belong to the committed object graph. A matching Go FIELD with no DATA
+head now errors rather than reporting absence. Each correction has a regression
+that failed before the source fix. Both reviewers confirmed the corrections;
+no verified blocker remains in their scopes.
+
+The final focused Go race checks pass; the final Rust public suite passes 142
+tests with the two baseline platform exceptions above. Both public APIs also
+strictly verify and perform exact/FIELD/global traversal on all seven Go/Rust
+documentation writer fixtures. No Linux live-reader result is inferred from this
+closed-file evidence.
