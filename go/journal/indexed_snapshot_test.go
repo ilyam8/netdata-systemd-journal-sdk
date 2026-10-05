@@ -407,3 +407,77 @@ func TestIndexedSnapshotConcurrentFirstPostingArray(t *testing.T) {
 		})
 	}
 }
+
+func TestIndexedSnapshotLegacyBootMetadata(t *testing.T) {
+	for _, modern := range []bool{false, true} {
+		t.Run(fmt.Sprint(modern), func(t *testing.T) {
+			path, w := snapshotFixture(t, false, CompressionNone, 3)
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			flags := binary.LittleEndian.Uint32(b[8:])
+			if !modern {
+				flags &^= compatibleTailEntryBootID
+			}
+			binary.LittleEndian.PutUint32(b[8:], flags)
+			b[56] ^= 0xff
+			binary.LittleEndian.PutUint64(b[200:], 999)
+			if err := os.WriteFile(path, b, 0600); err != nil {
+				t.Fatal(err)
+			}
+			s, err := OpenIndexedSnapshot(context.Background(), path, IndexedSnapshotOptions{})
+			if modern {
+				if err == nil {
+					s.Close()
+					t.Fatal("modern mismatched tail accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			if err := VerifyIndex(context.Background(), path); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.VisitEntries(context.Background(), func(e *SnapshotEntry) error {
+				if e.BootID != testBootID || e.Monotonic != e.Seqnum {
+					return fmt.Errorf("entry metadata was replaced by legacy header")
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestIndexedSnapshotRejectsFieldWithoutData(t *testing.T) {
+	path, w := snapshotFixture(t, false, CompressionNone, 3)
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for off := binary.LittleEndian.Uint64(b[88:]); off <= binary.LittleEndian.Uint64(b[136:]); off += align8(binary.LittleEndian.Uint64(b[off+8:])) {
+		size := binary.LittleEndian.Uint64(b[off+8:])
+		if b[off] == objectTypeField && string(b[off+fieldObjectHeaderSize:off+size]) == "SCHEMA" {
+			binary.LittleEndian.PutUint64(b[off+32:], 0)
+			break
+		}
+	}
+	if err := os.WriteFile(path, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenIndexedSnapshot(context.Background(), path, IndexedSnapshotOptions{CaptureFields: [][]byte{[]byte("SCHEMA")}})
+	if err == nil {
+		s.Close()
+		t.Fatal("missing FIELD data chain reported as absent")
+	}
+}

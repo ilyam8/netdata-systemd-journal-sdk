@@ -355,3 +355,54 @@ fn strict_index_rejects_empty_entry_metadata_and_field_orphans() {
         .head_data_offset = None;
     assert!(verify_index(&path, &SnapshotControl::default()).is_err());
 }
+
+#[test]
+fn indexed_snapshot_legacy_header_boot_metadata() {
+    for modern in [false, true] {
+        let (_dir, path, mut journal, mut writer) = fixture(false, Compression::None);
+        for index in 1..=3 {
+            append(&mut journal, &mut writer, index);
+        }
+        let header = journal.journal_header_mut();
+        if !modern {
+            header.compatible_flags &= !2;
+        }
+        header.tail_entry_boot_id = *test_uuid(7).as_bytes();
+        header.tail_entry_monotonic = 999;
+        let control = SnapshotControl::default();
+        let result = IndexedSnapshot::open(&path, IndexedSnapshotOptions::default(), &control);
+        if modern {
+            assert!(result.is_err());
+            continue;
+        }
+        let mut snapshot = result.unwrap();
+        verify_index(&path, &control).unwrap();
+        snapshot
+            .visit_entries(&control, |entry| {
+                assert_eq!(entry.metadata().monotonic, entry.metadata().seqnum);
+                assert_eq!(entry.metadata().boot_id, *test_uuid(2).as_bytes());
+                Ok(())
+            })
+            .unwrap();
+    }
+}
+
+#[test]
+fn strict_index_rejects_hash_tables_outside_object_tail() {
+    for no_objects in [false, true] {
+        let (_dir, path, mut journal, _writer) = fixture(false, Compression::None);
+        let control = SnapshotControl::default();
+        verify_index(&path, &control).unwrap();
+        let header = journal.journal_header_mut();
+        header.tail_object_offset = if no_objects {
+            None
+        } else {
+            NonZeroU64::new(header.field_hash_table_offset.unwrap().get() - 16)
+        };
+        header.n_objects = if no_objects { 0 } else { 1 };
+        assert!(
+            verify_index(&path, &control).is_err(),
+            "uncommitted hash table was certified"
+        );
+    }
+}

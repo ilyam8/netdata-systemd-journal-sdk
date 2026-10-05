@@ -390,3 +390,60 @@ func TestVerifyIndexRejectsUncommittedField(t *testing.T) {
 		t.Fatalf("expected empty FIELD rejection, got %v", err)
 	}
 }
+
+func TestVerifyIndexRejectsAscendingFieldChain(t *testing.T) {
+	for _, compact := range []bool{false, true} {
+		t.Run(fmt.Sprint(compact), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "field-order.journal")
+			opts := testOptions()
+			opts.Compact = compact
+			w, err := Create(path, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 3; i++ {
+				if err := w.Append([]Field{StringField("FIELD", fmt.Sprint(i))}, EntryOptions{RealtimeUsec: uint64(i + 1), MonotonicUsec: uint64(i + 1)}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			buf, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var data []uint64
+			var field uint64
+			for off := binary.LittleEndian.Uint64(buf[88:]); off <= binary.LittleEndian.Uint64(buf[136:]); off += align8(binary.LittleEndian.Uint64(buf[off+8:])) {
+				switch buf[off] {
+				case objectTypeData:
+					data = append(data, off)
+				case objectTypeField:
+					field = off
+				}
+			}
+			if len(data) != 3 || field == 0 {
+				t.Fatal("invalid fixture")
+			}
+			// Preserve membership and all hash/posting links, reversing only FIELD order.
+			binary.LittleEndian.PutUint64(buf[field+32:], data[0])
+			for i, off := range data {
+				var next uint64
+				if i+1 < len(data) {
+					next = data[i+1]
+				}
+				binary.LittleEndian.PutUint64(buf[off+32:], next)
+			}
+			if err := os.WriteFile(path, buf, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := VerifyFile(path); err != nil {
+				t.Fatalf("compatibility verifier changed: %v", err)
+			}
+			if err := VerifyIndex(context.Background(), path); err == nil {
+				t.Fatal("strict verification accepted FIELD order rejected by snapshots")
+			}
+		})
+	}
+}

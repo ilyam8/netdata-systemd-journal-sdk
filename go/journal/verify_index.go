@@ -327,6 +327,9 @@ func (v *graphVerifier) validateIndexFieldChains() error {
 			if !ok {
 				return fmt.Errorf("FIELD chain references missing DATA")
 			}
+			if data.nextFieldOffset != 0 && data.nextFieldOffset >= current {
+				return fmt.Errorf("FIELD DATA chain does not decrease")
+			}
 			if data.fieldName != field.name {
 				return fmt.Errorf("FIELD chain DATA name mismatch")
 			}

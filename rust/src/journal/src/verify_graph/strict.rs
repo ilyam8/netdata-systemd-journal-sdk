@@ -50,6 +50,13 @@ impl GraphVerifier<'_> {
     // Each DATA posting cursor advances once per ENTRY reference. Repeated
     // values cost O(total references), without a second incidence graph.
     pub(super) fn validate_strict_indexes(&self) -> Result<(), String> {
+        // Parsing each walked table validates its header pointer and extent.
+        // A header pointer alone can refer to an unpublished object after tail.
+        for kind in [OBJECT_TYPE_DATA_HASH_TABLE, OBJECT_TYPE_FIELD_HASH_TABLE] {
+            if self.counts[kind as usize] != 1 {
+                return Err("missing or duplicate committed hash table object".into());
+            }
+        }
         let mut arrays = HashSet::new();
         let entries = self.strict_array_chain(
             &mut arrays,

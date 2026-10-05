@@ -174,9 +174,9 @@ impl IndexedSnapshot {
             let entry = snapshot.file.entry_ref(tail)?;
             if entry.header.seqnum != header.tail_entry_seqnum
                 || entry.header.realtime != header.tail_entry_realtime
-                || entry.header.monotonic != header.tail_entry_monotonic
                 || (header.compatible_flags & 2 != 0
-                    && entry.header.boot_id != header.tail_entry_boot_id)
+                    && (entry.header.monotonic != header.tail_entry_monotonic
+                        || entry.header.boot_id != header.tail_entry_boot_id))
             {
                 return Err(corrupt("tail metadata disagrees with committed entry"));
             }

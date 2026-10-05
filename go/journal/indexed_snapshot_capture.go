@@ -51,7 +51,7 @@ func (s *IndexedSnapshot) captureBoundary(ctx context.Context) error {
 	if err := s.checkObject(entry, eh.object.size); err != nil {
 		return err
 	}
-	if eh.seqnum != h.tailEntrySeqnum || eh.realtime != h.tailEntryRealtime || eh.monotonic != h.tailEntryMonotonic || eh.bootID != h.tailEntryBootID {
+	if eh.seqnum != h.tailEntrySeqnum || eh.realtime != h.tailEntryRealtime || (h.compatibleFlags&compatibleTailEntryBootID != 0 && (eh.monotonic != h.tailEntryMonotonic || eh.bootID != h.tailEntryBootID)) {
 		return snapshotCorrupt("tail metadata disagrees with committed entry count")
 	}
 	if h.headerSize >= 272 && h.tailEntryOffset != entry {
@@ -186,10 +186,11 @@ func (s *IndexedSnapshot) findField(ctx context.Context, name []byte) (uint64, e
 			return 0, snapshotCorrupt("unpublished FIELD hash link")
 		}
 		if h.hash == hash && bytes.Equal(name, value) {
-			if h.headDataOffset != 0 {
-				if err := s.checkOffset(h.headDataOffset); err != nil {
-					return 0, err
-				}
+			if h.headDataOffset == 0 {
+				return 0, snapshotCorrupt("FIELD has no DATA chain")
+			}
+			if err := s.checkOffset(h.headDataOffset); err != nil {
+				return 0, err
 			}
 			return h.headDataOffset, nil
 		}
