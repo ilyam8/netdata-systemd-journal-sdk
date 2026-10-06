@@ -2,8 +2,8 @@
 
 ## Status
 
-Status: in-progress
-Sub-state: reopened for authorized saved-comment corrections on feat/indexed-snapshot at ac38ddb. Prior review remains evidence, but reproduced contract defects and live-validation claims are being corrected before renewed readiness. No GitHub state lookup, remote replies, push or publication.
+Status: completed
+Sub-state: saved-comment corrections implemented in dbfc60a, validated and independently reviewed. Final docs clarify baseline behavior and record current performance/live evidence. No GitHub state lookup, remote replies, push or publication.
 
 ## Requirements
 
@@ -206,7 +206,7 @@ Additional implementation evidence:
 - Stock systemd 257.13 in a disposable container verifies all seven generated Go/Rust documentation journals. Read-only synthetic mounts only; no host journal or service accessed. This is closed-file verification, not a new Linux live-reader parity claim.
 - Go 100k-row collision-heavy snapshot benchmark (six runs): capture median28.1us/12,344B, exact100-row payload traversal includingopen205us/12,456B, FIELD392.5us, all 100kpayloads13.31ms/12,608B; eageropen2.195ms/5,155,297B. No cold-cache claim.
 - Mixed250kfixture strict verification: Go1.04s/681.6MB cumulative allocations/~494MB process-treepeakRSS; Rust1.64s/~537MB childpeakRSS after cursor optimization. These are offline graph-sized costs, not query-open costs. Rust capture97us, exact2496postings265us, FIELD2.645ms, lazyglobal10.949ms; metadata-only visits differ from Go100kpayload workload.
-- Six alternating30krow Go writer trials: baseline143.3ms, changed146.2ms median (~2.0% difference; overlapping ranges). Same mixed32-field structured append, compact layout, defaultlivepublication. No broad speedup/regression claim from this noisy small difference.
+- Six alternating30krow Go writer trials: baseline143.3ms, changed146.2ms median (~2.0% difference; overlapping ranges). Same mixed 32-field structured append, compact layout, defaultlivepublication. No broad speedup/regression claim from this noisy small difference.
 
 ## Outcome
 
@@ -222,7 +222,7 @@ Publish the reviewed SDK version through the user-owned release workflow, then e
 
 ## Regression Log
 
-No completed claim was reopened. The experiment explicitly excluded production recovery certification; this finding comes from the subsequent production design.
+The initial experiment excluded production recovery certification; the production design added it. The completed implementation was subsequently reopened for the supplied-comment corrections documented below.
 
 Approval recorded 2026-10-06: user replied "approve" to option 1 and the prerequisite SDK fixes. Gate ready before first source change.
 
@@ -261,10 +261,18 @@ Artifact impact: correct wiki/READMEs and current spec for precise lifetime/memo
 
 Open decisions: none for restoring the approved contract. Scope is fixed by user instruction. A genuinely new public-contract fork must be raised with evidence before implementation.
 
-Validation and final dispositions: pending execution of the recorded correction plan; prior completed sections above are historical evidence, not a renewed readiness claim.
+Correction dispositions: 22 accepted supplied comments (including duplicate reports), one rejected theoretical SHA-256 collision report without a production trigger. The ignored evidence ledger .local/indexed-snapshot-review-disposition.md enumerates all 23; committed regression tests and documentation carry the durable findings.
 
 User steering: fixes must eliminate the cause/class, rather than accumulate symptom patches. The correction uses three shared invariants: (1) validate captured extents before variable reads and refresh only ambiguous cached zero posting scalars after an observed live count; (2) poison only after possible storage or publishable in-memory mutation, including sealing/hash-depth bookkeeping; (3) verify graph populations and unique DATA×ENTRY membership consistently across layouts/languages. Valid concurrent append controls cover each repaired pointer/slot path.
 
 The required Linux arm64 build exposed an existing ABI assumption in Rust's two user/group-name lookup buffers (i8 versus libc::c_char). Both buffers now use the platform ABI type; searching rust/src found no further identical assumptions. This bounded portability correction is necessary to validate actual SDK binaries, with no public API or identity-discovery policy change. Baseline ac38ddb has the same two offending buffers; the Linux compiler reports E0308 before the correction.
 
-Correction validation checkpoint: full Go module tests and vet pass; full journal race 29.117 s; Linux arm64 unprivileged Rust public/core/directory suites 150/83/9 pass. All 33 wiki examples, 16-page structure and 78 harness tests pass. Stock257.13 live matrix18/18 and verifier matrix63/63 pass, with100entries/writer,10ms pacing, two polling readers each stock/Go/Rust and one libsystemd reader. Sealed first-run environment lacked libgcrypt20; corrected task image and complete rerun pass. No v260.1 or long-duration stress claim. Linux386 production and Windowsamd64 cross-builds pass;386testbinary requires an overlay for pre-existing unrelated test timestamp overflow, not a runtime pass. Before/after snapshots and isolated12-pair writers show no significant regression; current hot-path profile commands and attribution are in the validation report. Independent correction review remains pending.
+Correction validation checkpoint: full Go module tests and vet pass; full journal race 29.117 s; Linux arm64 unprivileged Rust public/core/directory suites 150/83/9 pass. All 33 wiki examples, 16-page structure and 78 harness tests pass. Stock 257.13 live matrix 18/18 and verifier matrix 63/63 pass, with 100 entries/writer, 10 ms pacing, two polling readers each stock/Go/Rust and one libsystemd reader. Sealed first-run environment lacked libgcrypt20; corrected task image and complete rerun pass. No v260.1 or long-duration stress claim. Linux/386 production and Windows/amd64 cross-builds pass; 386 test binary requires an overlay for pre-existing unrelated test timestamp overflow, not a runtime pass. Before/after snapshots and isolated 12-pair writers show no significant regression; current hot-path profile commands and attribution are in the validation report. Independent correction review of dbfc60a is complete: separate read-only reviewers covered Rust, Go writer/verifier and Go snapshots/docs, without reviewing their own implementations. No code blocker remained; one stale baseline-tense sentence was corrected directly. The Go reviewer reran focused regressions (1.178 s).
+
+Current sibling writer evidence: six alternating-order trials share 30,000 mixed 32-field rows, compact/uncompressed/unsealed format, equal bucket counts, every-entry publication and equivalent append-only timers. Go 172.6 ms, Rust windowed 227.8 ms, Rust whole-file 208.0 ms medians; trusted-unique bypass disabled. Documentation records exact workload/profile commands and why stock/snapshot comparison is not equivalent. No general throughput or language ranking claim.
+
+Final review disposition: root causes are addressed at shared validation/mutation/graph boundaries, not by zero-link exemptions, fixture skips, blanket failure poisoning or speculative hash-collision buckets. The extra libc::c_char correction restores the required Linux arm64 build. All implementation is in local commit dbfc60a; no remote state was queried or changed. Final documentation closure is complete. DEM journal, RUM history and synthetic history tests pass with the local SDK override; the sandbox-only RUM identity mismatch was reproduced on ac38ddb and disappears when the explicit macOS identity-helper read is permitted. Netdata source remains unchanged.
+
+Completion assessment: approved clean end state and scope rechecked; shared-boundary fixes, coupled docs/spec/tests, direct validation and three independent cross-scope reviews are complete. No verified blocker remains. Existing external publication/consumer release staging remains unchanged; no new in-scope work is deferred. Theoretical SHA-256 collision hardening is rejected, not deferred. SOW audit passes; completed file returns to done.
+
+Correction reference reconciliation: `rg -n 'arena\.writeAt' go/journal` returns no references to the removed duplicate arena write wrappers. `rg -n 'appendMutated|required_posting|refreshPostingOffset|read_fresh_bytes_at' go/journal rust/src` returns 32 references, all retained mutation tracking, required-offset helpers/callers or regression checks. The canonical primitives replace duplicate wrappers; no compatibility path or deferred coupled reference remains.

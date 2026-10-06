@@ -252,3 +252,28 @@ which is not present in this macOS run or the stock-257 validation container;
 no stock writer throughput comparison is claimed. Earlier Rust metadata-only
 snapshot numbers above also do not match Go's payload-visiting callbacks and
 must not be ranked against them.
+
+A fresh sibling writer comparison uses six alternating-order trials, the same
+30,000 mixed rows with 32 structured fields, compact/uncompressed/unsealed files,
+233,016 DATA buckets, 1,023 FIELD buckets and publication on every entry. Median
+append time is Go 172.6 ms, Rust windowed 227.8 ms, and Rust whole-file 208.0 ms
+(the faster Rust mode in this workload). Rust trusted-unique bypass is disabled.
+Both timers exclude row generation, creation, final close/sync and verification.
+These are current matched-workload measurements, not a language-wide ranking.
+Use the existing writer_core_bench drivers in both languages with --rows 30000,
+--api-mode structured-field and --live-publish-every-entries 1; build the Rust
+package in release mode and compare --mmap-strategy windowed and whole-file.
+
+Independent correction review of dbfc60a covered Rust snapshot/writer/graph
+behavior, Go mutation/size/reverse-index behavior, and Go snapshot bounds/cache
+coherence plus documentation. No verified code blocker remained. Review found
+one stale present-tense baseline sentence in the design note; it now explicitly
+identifies the old behavior. The Go reviewer also reran focused capacity,
+sealing, duplicate-reference, interruption and preservation tests (1.178 s).
+
+The current DEM consumer journal, RUM history and synthetic history suites pass
+with the local SDK override. The first sandboxed RUM run failed its comparison
+between two independently loaded boot IDs: macOS denied kern.bootsessionuuid,
+so both helper loads used distinct random fallback IDs. The same assertion
+fails on ac38ddb; the RUM suite passes when that explicit identity-helper read
+is permitted. No consumer source was changed by this SDK review.
