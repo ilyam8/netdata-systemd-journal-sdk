@@ -116,3 +116,8 @@ both readers against both writers at seed and committed-growth checkpoints; Rust
 also pauses before ENTRY publication. SDK unit tests retain readers across real
 mid-append growth, with windowed and whole-file Rust coverage. Final validation
 and open-cost measurements are recorded in indexed-snapshot-validation.md.
+
+
+Independent review of correction `104ac3e` found no blockers: ordinary-reader
+mapping safety and stable capture/recovery invariants remain intact. H05 is
+accepted and fixed; no additional issue or deferred correction was identified.

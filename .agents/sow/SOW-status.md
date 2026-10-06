@@ -4,7 +4,7 @@ Last updated: 2026-10-06
 
 ## Current
 
-- SOW-0147 - Indexed Snapshots For Domain History: reopened for a confirmed Rust live-reader arena-growth regression. The approved correction separates live mapping/access bounds from stable-file integrity validation and adds deterministic regular/compact cross-language growth coverage. Native subagent review authorized; no push or release.
+None.
 
 ## Pending
 
@@ -44,6 +44,8 @@ Last updated: 2026-10-06
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
+
+- SOW-0147 - Indexed Snapshots For Domain History: completed again. Commit 104ac3e separates ordinary live-reader mapping safety from stable arena validation. Deterministic growth 20/20, stock/live 18/18, verifier 63/63, affected Rust/Go suites and independent review pass. No push or release.
 
 - SOW-0149 - Snapshot Payload Header Cost: completed. Commit 0d365e2 removes unnecessary Go DATA parsing in payload traversal; SDK broad fixture improves 23 percent and current DEM broad queries improve 18-20 percent. Contract tests, race checks, controlled benchmarks and independent review pass.
 
