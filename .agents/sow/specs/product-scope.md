@@ -1110,7 +1110,11 @@ mapping or writer mutation. Empty populations MAY inherit tail sequence state;
 current-file entry pointers, head sequence and timestamps MUST be empty. Tail
 boot metadata MUST follow historical header field presence and compatible flags.
 These shared header checks MUST NOT turn compatibility readers into full graph
-certifiers or reject the historical damaged-tail fixtures they already support.
+certifiers or reject the historical damaged-tail fixtures they already support. Ordinary live readers MUST permit declared capacity to exceed physical size
+during normal append preparation while validating header arithmetic and the
+physical bounds of every mapped or accessed region. Stable-file integrity checks
+MUST remain owned by writer-excluded capture, strict verification and append-open,
+not unconditionally applied at ordinary reader open.
 Rejected append-open validation MUST leave file bytes and extent unchanged.
 Writable reuse and sync MUST preserve existing/published allocation, including
 final-object alignment padding. Temporary growth caused only by mapping windows

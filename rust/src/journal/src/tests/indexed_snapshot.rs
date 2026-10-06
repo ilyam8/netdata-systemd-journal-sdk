@@ -598,11 +598,23 @@ fn strict_index_rejects_missing_or_duplicate_populated_tables() {
     }
 }
 
+const DECLARED_ARENA_DAMAGE: [&str; 6] = [
+    "zero",
+    "tail-header",
+    "tail-object",
+    "hash-extent",
+    "beyond-file",
+    "overflow",
+];
+
 fn damage_declared_arena(journal: &mut JournalFile<MmapMut>, damage: &str) {
+    let file_size = journal.reader_file_size().unwrap();
     let tail = journal.journal_header_ref().tail_object_offset.unwrap();
     let tail_size = journal.object_header_ref(tail).unwrap().size;
     let header = journal.journal_header_mut();
     header.arena_size = match damage {
+        "beyond-file" => file_size + 8 - header.header_size,
+        "overflow" => u64::MAX,
         "zero" => 0,
         "tail-header" => tail.get() + 8 - header.header_size,
         "tail-object" => tail.get() + tail_size - 1 - header.header_size,
@@ -619,7 +631,7 @@ fn damage_declared_arena(journal: &mut JournalFile<MmapMut>, damage: &str) {
 #[test]
 fn strict_index_rejects_objects_outside_declared_arena() {
     for compact in [false, true] {
-        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+        for damage in DECLARED_ARENA_DAMAGE {
             let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
             append(&mut journal, &mut writer, 1);
             damage_declared_arena(&mut journal, damage);
@@ -636,7 +648,7 @@ fn strict_index_rejects_objects_outside_declared_arena() {
 #[test]
 fn snapshot_rejects_objects_outside_declared_arena() {
     for compact in [false, true] {
-        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+        for damage in DECLARED_ARENA_DAMAGE {
             let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
             append(&mut journal, &mut writer, 1);
             damage_declared_arena(&mut journal, damage);
@@ -658,7 +670,7 @@ fn snapshot_rejects_objects_outside_declared_arena() {
 #[test]
 fn append_open_rejects_objects_outside_declared_arena_without_mutation() {
     for compact in [false, true] {
-        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+        for damage in DECLARED_ARENA_DAMAGE {
             let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
             append(&mut journal, &mut writer, 1);
             damage_declared_arena(&mut journal, damage);
@@ -677,7 +689,7 @@ fn append_open_rejects_objects_outside_declared_arena_without_mutation() {
 #[test]
 fn writer_construction_rejects_objects_outside_declared_arena_without_mutation() {
     for compact in [false, true] {
-        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+        for damage in DECLARED_ARENA_DAMAGE {
             let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
             append(&mut journal, &mut writer, 1);
             drop(writer);
@@ -747,7 +759,7 @@ fn empty_inherited_sequence_snapshot_stays_frozen_after_append() {
 #[test]
 fn strict_reuse_guard_preserves_invalid_arena_bytes() {
     for compact in [false, true] {
-        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+        for damage in DECLARED_ARENA_DAMAGE {
             let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
             append(&mut journal, &mut writer, 1);
             damage_declared_arena(&mut journal, damage);

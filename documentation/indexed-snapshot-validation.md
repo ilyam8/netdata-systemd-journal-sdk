@@ -383,3 +383,50 @@ file preflight, mapping effects, retained versus temporary allocation, resumed
 append alignment and their callers. Earlier coverage of unchanged 4fcb79d
 surfaces remains applicable. No verified blocker remains. Raw reproduction logs
 remain local; the committed tests carry the durable regression coverage.
+
+
+## Live arena growth correction: October 6
+
+The earlier Linux matrices passed but did not deterministically inspect the
+large-DATA preparation interval. Human finding H05 exposed ordinary Rust opening
+applying stable-file arena consistency to that live interval. The regression test
+failed on `f35889c` at ordinary open and passes after splitting mapping safety
+from stable integrity checks. This supersedes any implication that the earlier
+live evidence covered that exact interleaving.
+
+Validation of the correction:
+
+- Rust core: 86 tests; public SDK: 167 tests on Linux. Directory writer: all 9
+  pass unprivileged; the initial root run bypassed a permission-denial fixture,
+  so that run was not treated as passing evidence.
+- Go module tests, journal race suite and module vet pass. A regular/compact Go
+  test observes the actual lazy payload preparation path, proves allocation has
+  grown physically, and reads committed entries with existing/new readers.
+- Rust regular/compact tests keep windowed and whole-file readers across DATA
+  preparation and final ENTRY publication. Thirty-two malformed-header/table
+  open cases retain physical mapping rejection. Stable snapshot, strict verify,
+  writer construction, append-open and reuse-guard tests additionally reject
+  arenas beyond the physical file or with overflowing extent arithmetic,
+  preserving bytes on rejection.
+- `python3 tests/interoperability/run_live_growth.py` passes 20 deterministic
+  reader observations on macOS and Linux across both writers/readers and layouts.
+  It compares payload SHA-256 digests and committed counts at acknowledged
+  stages. Rust includes the uncommitted-DATA stage; Go's matrix checkpoints are
+  after complete appends, while its unit test covers mid-append behavior.
+- Full Linux stock/live matrix: 18/18 feature cases, 30 entries per writer,
+  two polling tasks per reader language and one libsystemd follower. Stock
+  systemd 257.13; regular, all three DATA compression modes, compact variants
+  and FSS. File-backed fixtures only, no host journal.
+- Verifier matrix: 63/63 results across 9 positive and 12 negative fixture
+  classes with stock/Rust/Go, including sealed verification.
+- Wiki validation passes; all 18 Go and 15 Rust documentation examples pass.
+  Rust examples were rerun with cached offline dependencies after a DNS failure.
+
+Six alternating before/after release-binary pairs measured 10,000 ordinary Rust
+opens per process on the same synthetic regular two-entry file, with 64 KiB
+reader windows. Baseline `f35889c`: median 11.934 microseconds/open; corrected:
+11.973 microseconds/open (+0.32%, overlapping ranges). Apple M4 Pro/macOS arm64,
+Rust 1.91; no OS cache flush. This is bounded open-cost evidence, not a throughput
+or cold-cache guarantee. The correction adds no open syscalls or per-entry work.
+Raw reproduction, matrix and timing evidence remains local under
+`.local/human-arena-probe/`.

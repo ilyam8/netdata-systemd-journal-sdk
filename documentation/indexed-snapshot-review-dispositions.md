@@ -91,3 +91,28 @@ is rejected by stock.
 
 Final test, interoperability and independent-review results are recorded in
 [indexed-snapshot-validation.md](indexed-snapshot-validation.md).
+
+
+## Third supplied human review: live growth
+
+[H05: live readers during arena growth](https://github.com/netdata/systemd-journal-sdk/pull/5#discussion_r4193955216)
+is accepted. At `f35889c`, a public Rust writer with its default publication
+cadence could announce a 16 MiB arena while physical length was 9,502,720 bytes
+and only the seed ENTRY was committed. Both layouts reproduced the failure;
+Go could read the seed while ordinary Rust opening returned ObjectExceedsFileBounds.
+The lazy field iterator exposes this actual append stage without SDK hooks or
+manual journal-byte changes. Prior completed-append growth tests missed it.
+
+The correction separates validation ownership. Ordinary opening checks header
+arithmetic and table mapping ranges against both declared and physical bounds,
+without requiring the entire rounded arena or mutable tail state to be stable.
+Indexed capture and append-open retain the full declared-arena validator; strict
+verification independently retains that same requirement. No writer behavior or
+Go runtime path changes. Negative tests cover unsafe mappings and preserve
+snapshot/verification/reuse rejection of oversized and overflowing arenas.
+
+The deterministic SDK growth matrix supplements the stock/live matrix. It checks
+both readers against both writers at seed and committed-growth checkpoints; Rust
+also pauses before ENTRY publication. SDK unit tests retain readers across real
+mid-append growth, with windowed and whole-file Rust coverage. Final validation
+and open-cost measurements are recorded in indexed-snapshot-validation.md.

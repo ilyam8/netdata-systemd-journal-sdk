@@ -633,3 +633,135 @@ fn journalctl_available() -> bool {
         .output()
         .is_ok_and(|output| output.status.success())
 }
+
+fn assert_live_growth_entries(reader: &JournalFile<crate::file::Mmap>, expected: usize) {
+    let mut offsets = Vec::new();
+    reader.entry_offsets(&mut offsets).unwrap();
+    assert_eq!(offsets.len(), expected);
+    for (index, entry) in offsets.into_iter().enumerate() {
+        let mut fields = Vec::new();
+        reader
+            .entry_data_object_offsets(entry, &mut fields)
+            .unwrap();
+        assert_eq!(fields.len(), 1);
+        reader
+            .visit_data_payload_at(fields[0], &mut Vec::new(), |payload| {
+                if index == 0 {
+                    assert_eq!(payload, b"MESSAGE=seed");
+                } else {
+                    assert_eq!(payload.len(), 9 * 1024 * 1024);
+                    assert!(payload.starts_with(b"MESSAGE="));
+                    assert!(payload[8..].iter().all(|byte| *byte == b'x'));
+                }
+                Ok(())
+            })
+            .unwrap();
+    }
+}
+
+#[test]
+fn live_readers_open_and_follow_during_arena_growth() {
+    use crate::file::{EntryField, ExperimentalMmapStrategy, Mmap};
+
+    for compact in [false, true] {
+        for strategy in [
+            ExperimentalMmapStrategy::Windowed,
+            ExperimentalMmapStrategy::WholeFile,
+        ] {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("system.journal");
+            let repo = crate::repository::File::from_path(&path).unwrap();
+            let mut file = JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3))
+                .with_compact(compact)
+                .with_data_hash_table_buckets(64)
+                .with_field_hash_table_buckets(16)
+                .create::<MmapMut>(&repo)
+                .unwrap();
+            let mut writer = JournalWriter::new(&mut file, 1, test_uuid(2)).unwrap();
+            assert_eq!(writer.live_publish_every_entries(), 1);
+            writer
+                .add_entry(&mut file, &[b"MESSAGE=seed"], 1_700_000_000_000_001, 1)
+                .unwrap();
+            let open = || JournalFile::<Mmap>::open_path_with_strategy(&path, 64 * 1024, strategy);
+            let existing = open().unwrap();
+            assert_live_growth_entries(&existing, 1);
+            let mut payload = b"MESSAGE=".to_vec();
+            payload.resize(9 * 1024 * 1024, b'x');
+            let mut observed_growth = false;
+            let mut during = None;
+            // The iterator resumes after DATA preparation, before ENTRY publication.
+            let fields =
+                std::iter::once(EntryField::raw(&payload)).chain(std::iter::from_fn(|| {
+                    let header = existing.journal_header_ref();
+                    assert_eq!(header.n_entries, 1);
+                    assert!(
+                        header.header_size + header.arena_size
+                            > std::fs::metadata(&path).unwrap().len()
+                    );
+                    observed_growth = true;
+                    assert_live_growth_entries(&existing, 1);
+                    let opened =
+                        open().expect("open while writer has prepared a larger DATA object");
+                    assert_live_growth_entries(&opened, 1);
+                    during = Some(opened);
+                    None
+                }));
+            writer
+                .add_entry_fields(&mut file, fields, 1_700_000_000_000_002, 2)
+                .unwrap();
+            assert!(observed_growth);
+            assert_live_growth_entries(during.as_ref().unwrap(), 2);
+            assert_live_growth_entries(&existing, 2);
+            assert_live_growth_entries(&open().unwrap(), 2);
+        }
+    }
+}
+
+#[test]
+fn live_open_rejects_unsafe_header_and_table_mappings() {
+    for compact in [false, true] {
+        let dir = TempDir::new().unwrap();
+        let source = dir.path().join("seed.journal");
+        let repo = crate::repository::File::from_path(&source).unwrap();
+        drop(
+            JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3))
+                .with_compact(compact)
+                .with_data_hash_table_buckets(64)
+                .with_field_hash_table_buckets(16)
+                .create::<MmapMut>(&repo)
+                .unwrap(),
+        );
+        let original = std::fs::read(&source).unwrap();
+        for (name, offset, value) in [
+            ("short header", 88, 200),
+            ("unaligned header", 88, 273),
+            ("header beyond file", 88, original.len() as u64 + 8),
+            ("arena overflow", 96, u64::MAX),
+            ("missing DATA offset", 104, 0),
+            ("missing DATA size", 112, 0),
+            ("missing FIELD offset", 120, 0),
+            ("missing FIELD size", 128, 0),
+            ("unaligned DATA offset", 104, 289),
+            ("unaligned FIELD offset", 120, 289),
+            ("short DATA table", 112, 8),
+            ("partial FIELD bucket", 128, 17),
+            (
+                "DATA overlaps header",
+                104,
+                u64::from_le_bytes(original[88..96].try_into().unwrap()),
+            ),
+            ("FIELD beyond file", 120, original.len() as u64),
+            ("DATA offset overflow", 104, u64::MAX - 7),
+            ("FIELD size overflow", 128, u64::MAX - 15),
+        ] {
+            let path = dir.path().join("invalid.journal");
+            let mut bytes = original.clone();
+            bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+            std::fs::write(&path, bytes).unwrap();
+            assert!(
+                JournalFile::<crate::file::Mmap>::open_path(&path, 64 * 1024).is_err(),
+                "{name}, compact={compact}"
+            );
+        }
+    }
+}

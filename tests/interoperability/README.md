@@ -79,6 +79,17 @@ python3 tests/interoperability/run_live_matrix.py --writers rust --poll-readers 
 python3 tests/interoperability/run_live_matrix.py --entries 10 --poll-readers 1
 ```
 
+### Deterministic arena growth
+
+`python3 tests/interoperability/run_live_growth.py` checks both SDK readers against
+both writers in regular/compact layouts while crossing an 8 MiB allocation
+boundary. Writers wait for reader acknowledgements after the seed and grown
+entry; Rust also waits after preparing the large DATA object, before publishing
+its ENTRY. Readers must return the exact committed population and payload hashes.
+Rust and Go unit tests separately keep existing readers open across those stages.
+The Rust unit test also covers both windowed and whole-file mapping strategies.
+This deterministic SDK check supplements the stock feature matrix above.
+
 ### What the live matrix proves
 
 For each writer language, the matrix proves all of the following:

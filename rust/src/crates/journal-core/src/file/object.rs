@@ -111,19 +111,19 @@ pub struct JournalHeader {
 }
 
 impl JournalHeader {
-    /// Validates declared extents before mapping variable-sized native indexes.
-    #[doc(hidden)]
-    pub fn validated_arena_end(&self, file_size: u64) -> Result<u64> {
-        let end = self
-            .header_size
-            .checked_add(self.arena_size)
-            .ok_or(JournalError::ObjectExceedsFileBounds)?;
-        if self.header_size < 208 || self.header_size % 8 != 0 || end > file_size {
+    fn declared_arena_end(&self) -> Result<u64> {
+        if self.header_size < 208 || self.header_size % 8 != 0 {
             return Err(JournalError::ObjectExceedsFileBounds);
         }
-        let tail = self.tail_object_offset.map_or(0, NonZeroU64::get);
-        if tail != 0 && (tail < self.header_size || tail % 8 != 0 || tail > end || end - tail < 16)
-        {
+        self.header_size
+            .checked_add(self.arena_size)
+            .ok_or(JournalError::ObjectExceedsFileBounds)
+    }
+
+    /// Bounds mappings without requiring a live writer's future allocation to exist.
+    pub(super) fn validate_reader_mappings(&self, file_size: u64) -> Result<()> {
+        let end = self.declared_arena_end()?.min(file_size);
+        if self.header_size > end {
             return Err(JournalError::ObjectExceedsFileBounds);
         }
         for (offset, size) in [
@@ -135,18 +135,42 @@ impl JournalHeader {
                 (Some(offset), Some(size)) => {
                     let offset = offset.get();
                     let size = size.get();
-                    if offset < self.header_size + 16
+                    if offset < self.header_size
+                        || offset - self.header_size < 16
                         || offset % 8 != 0
                         || size < 16
                         || size % 16 != 0
                         || offset > end
                         || size > end - offset
-                        || offset - 16 > tail
                     {
                         return Err(JournalError::ObjectExceedsFileBounds);
                     }
                 }
                 _ => return Err(JournalError::InvalidObjectLocation),
+            }
+        }
+        Ok(())
+    }
+
+    /// Validates stable declared extents for writer-excluded capture and recovery.
+    #[doc(hidden)]
+    pub fn validated_arena_end(&self, file_size: u64) -> Result<u64> {
+        self.validate_reader_mappings(file_size)?;
+        let end = self.declared_arena_end()?;
+        if end > file_size {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        let tail = self.tail_object_offset.map_or(0, NonZeroU64::get);
+        if tail != 0 && (tail < self.header_size || tail % 8 != 0 || tail > end || end - tail < 16)
+        {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        for offset in [self.data_hash_table_offset, self.field_hash_table_offset]
+            .into_iter()
+            .flatten()
+        {
+            if offset.get() - 16 > tail {
+                return Err(JournalError::ObjectExceedsFileBounds);
             }
         }
         Ok(end)

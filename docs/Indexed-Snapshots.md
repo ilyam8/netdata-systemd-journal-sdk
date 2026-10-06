@@ -144,6 +144,12 @@ physical file contains extra preallocated bytes. An empty rotated file may
 inherit a tail sequence counter, but must not claim current-file entry offsets,
 head sequence or timestamps. Tail boot metadata follows the header version and
 its compatibility flag.
+These checks assume writer exclusion. Ordinary live readers instead bound their
+mappings and payload reads by physical bytes: a writer may announce a larger
+arena while still preparing the next entry. Such readers can read already
+committed entries during that growth window. This tolerance does not apply to
+indexed snapshot capture, strict verification or opening a writer for append.
+
 It does not authenticate sealed TAGs; use the existing keyed verifier for that.
 `VerifyFile`/`verify_file` retain their compatibility-oriented tolerance and do
 not establish this stronger recovery guarantee.
