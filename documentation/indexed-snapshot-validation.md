@@ -375,3 +375,11 @@ publication on every entry; generation, creation, close and verification are
 outside the timer. Reproduce with the release writer_core_bench using
 `--rows 30000 --api-mode structured-field --mmap-strategy windowed
 --live-publish-every-entries 1` and distinct synthetic output files.
+
+Independent rereview of b3d27d9 confirms both original allocation reproducers:
+valid compact reopen/sync retains 8,388,608 bytes and strict validity; malformed
+tight-tail open rejects without changing its 2,088 bytes. Review covered original
+file preflight, mapping effects, retained versus temporary allocation, resumed
+append alignment and their callers. Earlier coverage of unchanged 4fcb79d
+surfaces remains applicable. No verified blocker remains. Raw reproduction logs
+remain local; the committed tests carry the durable regression coverage.
