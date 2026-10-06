@@ -68,6 +68,13 @@ hot-path guidance, production profiles, and wiki publishing details.
 The `documentation/` directory contains project/internal operational notes.
 It is not the consumer wiki source.
 
+## Releases
+
+The manual GitHub Actions Release workflow validates both SDKs and publishes
+Rust crates. Maintainers then push matching repository/Go tags using their
+existing access. See [the release guide](RELEASING.md) for one-time setup,
+source selection and recovery from an interrupted publication.
+
 ## Rust Package
 
 The Rust SDK is published as the crates.io package `systemd-journal-sdk`.
