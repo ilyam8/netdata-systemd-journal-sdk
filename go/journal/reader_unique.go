@@ -31,7 +31,7 @@ func (r *Reader) VisitUnique(fieldName string, visit func([]byte) error) error {
 		if err != nil {
 			return err
 		}
-		err = r.visitDataPayloadWithHeader(offset, header, func(payload []byte) error {
+		err = r.visitDataPayloadWithHeader(offset, header.object, func(payload []byte) error {
 			if len(payload) <= len(field) || !bytes.Equal(payload[:len(field)], field) || payload[len(field)] != '=' {
 				return fmt.Errorf("%w: field data object at offset %d does not match %q", errCorruptObject, offset, fieldName)
 			}
@@ -90,7 +90,7 @@ func (r *Reader) EnumerateUniquePayload() ([]byte, bool, error) {
 	r.uniqueCurrentOffset = header.nextFieldOffset
 
 	var out []byte
-	err = r.visitDataPayloadWithHeader(offset, header, func(payload []byte) error {
+	err = r.visitDataPayloadWithHeader(offset, header.object, func(payload []byte) error {
 		if len(payload) <= len(field) || !bytes.Equal(payload[:len(field)], field) || payload[len(field)] != '=' {
 			return fmt.Errorf("%w: field data object at offset %d does not match %q", errCorruptObject, offset, r.uniqueField)
 		}

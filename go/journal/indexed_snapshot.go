@@ -203,6 +203,23 @@ func (s *IndexedSnapshot) readData(off uint64) (dataHeader, error) {
 	return d, s.checkObject(off, d.object.size)
 }
 
+// readPayloadHeader avoids parsing mutable hash/posting metadata when only the
+// payload's type, compression flags and committed extent are needed.
+func (s *IndexedSnapshot) readPayloadHeader(off uint64) (objectHeader, error) {
+	if err := s.checkOffset(off); err != nil {
+		return objectHeader{}, err
+	}
+	buf, err := s.reader.readSlice(off, objectHeaderSize)
+	if err != nil {
+		return objectHeader{}, err
+	}
+	header, err := parseObjectHeader(buf)
+	if err != nil {
+		return header, err
+	}
+	return header, s.checkObject(off, header.size)
+}
+
 func (s *IndexedSnapshot) arrayHeader(off uint64) (offsetArrayHeader, uint64, error) {
 	if err := s.checkOffset(off); err != nil {
 		return offsetArrayHeader{}, 0, err

@@ -511,3 +511,73 @@ func TestIndexedSnapshotArchivedStateIsFrozen(t *testing.T) {
 		t.Fatal("offline capture reported archived")
 	}
 }
+
+func TestIndexedSnapshotRejectsMalformedPayloadObjects(t *testing.T) {
+	for _, compact := range []bool{false, true} {
+		for _, mode := range []ReaderAccessMode{ReaderAccessReadAt, ReaderAccessMmap} {
+			for _, mutation := range []string{"type", "short-object", "short-data", "extent", "overflow", "unaligned", "past-tail", "before-header", "compression"} {
+				t.Run(fmt.Sprintf("compact=%v/access=%d/%s", compact, mode, mutation), func(t *testing.T) {
+					path, writer := snapshotFixture(t, compact, CompressionNone, 1)
+					if err := writer.Close(); err != nil {
+						t.Fatal(err)
+					}
+					file, err := os.OpenFile(path, os.O_RDWR, 0)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer file.Close()
+					itemOffset := writer.header.tailEntryOffset + entryObjectHeaderSize
+					var item [8]byte
+					if _, err := file.ReadAt(item[:], int64(itemOffset)); err != nil {
+						t.Fatal(err)
+					}
+					dataOffset := binary.LittleEndian.Uint64(item[:])
+					payloadOffset := uint64(dataObjectHeaderSize)
+					if compact {
+						dataOffset = uint64(binary.LittleEndian.Uint32(item[:]))
+						payloadOffset = compactDataObjectHeaderSize
+					}
+					patchOffset := dataOffset + 8
+					patch := make([]byte, 8)
+					switch mutation {
+					case "type":
+						patchOffset, patch = dataOffset, []byte{objectTypeField}
+					case "short-object":
+						binary.LittleEndian.PutUint64(patch, objectHeaderSize-1)
+					case "short-data":
+						binary.LittleEndian.PutUint64(patch, payloadOffset-1)
+					case "extent":
+						binary.LittleEndian.PutUint64(patch, writer.appendOffset)
+					case "overflow":
+						binary.LittleEndian.PutUint64(patch, ^uint64(0))
+					case "compression":
+						patchOffset, patch = dataOffset+1, []byte{objectCompressedZSTD}
+					default:
+						patchOffset = itemOffset
+						offset := dataOffset + 1
+						if mutation == "past-tail" {
+							offset = writer.header.tailObjectOffset + 8
+						} else if mutation == "before-header" {
+							offset = writer.header.headerSize - 8
+						}
+						binary.LittleEndian.PutUint64(patch, offset)
+						if compact {
+							patch = patch[:4]
+						}
+					}
+					if _, err := file.WriteAt(patch, int64(patchOffset)); err != nil {
+						t.Fatal(err)
+					}
+					snapshot := openTestSnapshot(t, path, IndexedSnapshotOptions{Reader: DefaultReaderOptions().WithAccessMode(mode).WithWindowSize(4096).WithMaxWindows(1)})
+					called := false
+					err = snapshot.VisitEntries(context.Background(), func(entry *SnapshotEntry) error {
+						return entry.VisitPayloads(func([]byte) error { called = true; return nil })
+					})
+					if err == nil || called {
+						t.Fatalf("malformed first DATA: err=%v, callback called=%v", err, called)
+					}
+				})
+			}
+		}
+	}
+}

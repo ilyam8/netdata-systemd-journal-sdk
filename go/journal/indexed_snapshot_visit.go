@@ -44,7 +44,7 @@ func (s *IndexedSnapshot) VisitField(ctx context.Context, name []byte, accept fu
 			return snapshotCorrupt("invalid FIELD DATA chain progress")
 		}
 		accepted := false
-		err = s.reader.visitDataPayloadWithHeader(off, d, func(payload []byte) error {
+		err = s.reader.visitDataPayloadWithHeader(off, d.object, func(payload []byte) error {
 			if len(payload) <= len(name) || !bytes.Equal(payload[:len(name)], name) || payload[len(name)] != '=' {
 				return snapshotCorrupt("FIELD DATA payload mismatch")
 			}
@@ -193,11 +193,11 @@ func (e *SnapshotEntry) VisitPayloads(visit func([]byte) error) error {
 				return err
 			}
 			off := entryOffsetArrayItem(buf[i*size:], r.offsetArrayItemSize())
-			d, err := s.readData(off)
+			header, err := s.readPayloadHeader(off)
 			if err != nil {
 				return err
 			}
-			if err := r.visitDataPayloadWithHeader(off, d, visit); err != nil {
+			if err := r.visitDataPayloadWithHeader(off, header, visit); err != nil {
 				return err
 			}
 		}

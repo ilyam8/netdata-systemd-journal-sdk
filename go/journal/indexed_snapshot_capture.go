@@ -232,7 +232,7 @@ func (s *IndexedSnapshot) findData(ctx context.Context, name, value []byte, capt
 		}
 		if h.hash == hash {
 			equal := false
-			err = r.visitDataPayloadWithHeader(off, h, func(actual []byte) error { equal = bytes.Equal(payload, actual); return nil })
+			err = r.visitDataPayloadWithHeader(off, h.object, func(actual []byte) error { equal = bytes.Equal(payload, actual); return nil })
 			if err != nil {
 				return 0, h, err
 			}

@@ -4,7 +4,7 @@ Last updated: 2026-10-06
 
 ## Current
 
-- None.
+- SOW-0149 - Snapshot Payload Header Cost: in-progress. Measure and remove redundant Go payload header decoding while preserving snapshot contracts.
 
 ## Pending
 

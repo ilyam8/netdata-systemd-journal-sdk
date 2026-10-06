@@ -108,3 +108,48 @@ tests with the two baseline platform exceptions above. Both public APIs also
 strictly verify and perform exact/FIELD/global traversal on all seven Go/Rust
 documentation writer fixtures. No Linux live-reader result is inferred from this
 closed-file evidence.
+
+## Payload-header follow-up
+
+SOW-0149 isolates a Go integration cost found after the initial SDK delivery.
+`SnapshotEntry.VisitPayloads` previously decoded and copied the complete 64-byte
+DATA header for every payload, although payload access needs only its 16-byte
+object header (type, size and compression flags). It now reads that object header
+and retains the same committed-offset/extent, DATA type/minimum-size,
+decompression, cancellation and callback lifetime checks. Capture, FIELD and
+posting operations still read full DATA metadata. The shared payload helper now
+accepts object metadata directly, avoiding the unnecessary full-header copy.
+
+Six alternating before/after process pairs used Go 1.27.1, macOS arm64 (Apple M4
+Pro), 300 ms benchmark windows and no OS cache flush. Each successive pair reversed
+its order. The SDK baseline was `529675f`; separately compiled binaries used the
+same current consumer source, verified by a source-hash manifest, with only an
+SDK source overlay selecting the baseline. Consumer source was Netdata's current
+DEM integration work on `netdata/netdata @ 9a2e0cbd5bc68fb559b39964238b5de1f1004236`,
+including uncommitted integration changes; this is not a released-consumer claim.
+
+| Operation | Before median | After median | Change |
+|---|---:|---:|---:|
+| SDK all payloads, 100,000 rows | 13.91 ms | 10.71 ms | -23.0% |
+| SDK exact match, 100 rows | 219.5 us | 216.5 us | No significant change |
+| DEM sessions, 15-minute range in 10,000 rows | 1.468 ms | 1.317 ms | -10.3% |
+| DEM sessions, all 10,000 rows | 8.965 ms | 7.332 ms | -18.2% |
+| DEM error overview, all rows | 8.829 ms | 7.098 ms | -19.6% |
+| DEM selected error, all rows | 8.727 ms | 7.068 ms | -19.0% |
+
+Benchstat reports p=0.002 for the reductions and p=0.394 for the exact-match
+comparison (six samples each). Allocation counts and bytes do not materially
+change; SDK broad traversal remains 12,608 B and 52 allocations per operation.
+These controlled timings support the optimization independently of CPU-profile
+attribution. They do not eliminate the whole DEM broad-query regression against
+its earlier saved-scan implementation, which remains a consumer integration
+comparison, and do not imply a general throughput or latency guarantee.
+
+All Go module tests and vet pass. Snapshot/unique-reader race tests pass, including
+compression, concurrent append and tiny-window remapping. Thirty-six new malformed
+payload cases cover regular/compact layouts and both reader access modes: wrong
+DATA type, short object/DATA sizes, extents beyond the captured end, overflowing
+size, unaligned/before-header/past-tail offsets, and invalid compressed payloads.
+They pass against both baseline and optimized code, preserving existing rejection
+behavior before invoking a payload callback. Rust uses its existing borrowed DATA
+view; no equivalent copying regression was established or speculative change made.
