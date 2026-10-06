@@ -154,3 +154,7 @@ Neither operation logs, serializes or writes a journal. The flagged file is
 unchanged from the PR base. Changing these operations would conceal an analyzer
 modeling error. Both alerts remain open on GitHub; this local pass does not claim
 the remote CodeQL gate is green.
+
+Independent review of `7c82941` confirms these dispositions and found no behavioral
+blocker in the helper extraction. All 19 Codacy findings are addressed locally;
+the two CodeQL false positives remain open for authorized remote handling.

@@ -4,7 +4,7 @@ Last updated: 2026-10-06
 
 ## Current
 
-- SOW-0147 - Indexed Snapshots For Domain History: in progress for the authorized Codacy/CodeQL PR findings pass; behavior-preserving decomposition and evidence-based security triage. No remote actions.
+None.
 
 ## Pending
 
@@ -44,6 +44,8 @@ Last updated: 2026-10-06
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
+
+- SOW-0147 - Indexed Snapshots For Domain History: completed again. Commit 7c82941 addresses all 19 Codacy findings with behavior-preserving decomposition, formatting and narrow audited annotations. Both CodeQL collection-operation alerts are documented false positives, still open remotely. Tests, analyzers, bounded benchmarks and independent review pass; no push or remote mutation.
 
 
 - SOW-0149 - Snapshot Payload Header Cost: completed. Commit 0d365e2 removes unnecessary Go DATA parsing in payload traversal; SDK broad fixture improves 23 percent and current DEM broad queries improve 18-20 percent. Contract tests, race checks, controlled benchmarks and independent review pass.
