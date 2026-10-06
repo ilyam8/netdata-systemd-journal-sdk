@@ -11,6 +11,11 @@ The normal Rust dependency is the public SDK package:
 journal = { package = "systemd-journal-sdk", version = "0.9.0" }
 ```
 
+Upgrading from Rust `0.8.x`: `0.9.0` adds the `SdkError::Cancelled` and
+`JournalError::WriterPoisoned` variants. Neither enum is `#[non_exhaustive]`,
+so code that matches every variant without a wildcard arm must handle the new
+variants.
+
 Use the lower-level packages only when the public package does not expose the
 type you need. For example, structured directory writes currently use
 `StructuredField` from `systemd-journal-sdk-log-writer`:

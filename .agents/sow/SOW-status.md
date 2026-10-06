@@ -4,12 +4,14 @@ Last updated: 2026-10-06
 
 ## Current
 
-- SOW-0150 - v0.9.0 Release: in-progress. Paired Rust/Go `0.9.0` release
-  for IndexedSnapshot work; release-prep branch `release/v0.9.0` ready for PR,
-  then Rust publication and `v0.9.0`/`go/v0.9.0` tags on upstream.
+None.
 
 ## Pending
 
+- SOW-0151 - v0.9.0 Publication: open. After PR #6 merges, publish the eight
+  Rust crates at `0.9.0` in dependency order and push paired `v0.9.0` /
+  `go/v0.9.0` tags to the canonical repository. Needs a crates.io publisher
+  decision; the crates currently have a single owner.
 - SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
   follow-up analysis for remaining global ENTRY-array and regular/fallback DATA
   array reopens found during SOW-0135 review; no implementation is authorized.
@@ -46,6 +48,11 @@ Last updated: 2026-10-06
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
+
+- SOW-0150 - v0.9.0 Release Preparation: completed in release PR #6. Rust and
+  Go versions, install examples, release notes and a Rust migration note for
+  the new `SdkError::Cancelled` and `JournalError::WriterPoisoned` variants;
+  PR CI passes. Publication tracked by SOW-0151.
 
 - SOW-0147 - Indexed Snapshots For Domain History: completed again. Commit 7c82941 addresses all 19 Codacy findings with behavior-preserving decomposition, formatting and narrow audited annotations. Both CodeQL collection-operation alerts are documented false positives, still open remotely. Tests, analyzers, bounded benchmarks and independent review pass; no push or remote mutation.
 

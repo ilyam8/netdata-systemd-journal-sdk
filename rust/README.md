@@ -533,3 +533,8 @@ for API examples, caller exclusion, borrowed payloads and recovery costs. Failur
 after a possible file or publication-state mutation prevent further mutation and
 preserve uncertain files during cleanup. Validation and capacity failures known
 to precede mutation leave the writer reusable.
+
+Upgrading from Rust `0.8.x`: `0.9.0` adds the `SdkError::Cancelled` and
+`JournalError::WriterPoisoned` variants. Neither enum is `#[non_exhaustive]`,
+so code that matches every variant without a wildcard arm must handle the new
+variants.
