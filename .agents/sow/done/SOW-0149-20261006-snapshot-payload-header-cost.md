@@ -2,8 +2,8 @@
 
 ## Status
 
-Status: in-progress
-Sub-state: implementation, controlled benchmarks and local validation pass; preparing implementation commit before main independent review.
+Status: completed
+Sub-state: validated implementation committed as 0d365e2; independent main-agent review found no blockers.
 
 ## Requirements
 
@@ -124,13 +124,14 @@ Failure handling:
 - Replaced only payload traversal full DATA reads with bounded object-header parsing; narrowed shared payload helper to object metadata. Full capture/FIELD/posting readers remain unchanged.
 - Six alternating pairs establish the SDK and consumer timing effects recorded in documentation/indexed-snapshot-validation.md. Consumer source manifest digest: e049e9365897213b76531c80854aa1ff4667425d4d0bfb7e428740d6fa83e99a.
 - Full Go tests, vet and selected race suite pass. Malformed payload checks pass on baseline and optimized paths, establishing unchanged safety checks.
+- Committed validated implementation as 0d365e2 before review as explicitly assigned. Main independent review found no blockers. Completed and moved this SOW in the required separate review-closure commit.
 
 ## Validation
 
 Acceptance criteria evidence:
 - Minimal object metadata is used only for payload access. Controlled timing improves SDK broad traversal by 23.0 percent and DEM broad queries by 18.2-19.6 percent, with unchanged allocation behavior.
 - New public-operation tests preserve all offset/type/size/extent and decompression rejection checks. Existing compression/remap/callback/cancellation/concurrency tests pass.
-- Independent review remains pending after the implementation commit; no readiness claim yet.
+- Main independently reviewed committed 0d365e2 and found no blockers; bounded SDK performance follow-up is complete.
 
 Tests or equivalent validation:
 - go test -overlay /private/tmp/dem-sdk-payload-before/overlay.json ./journal -run '^TestIndexedSnapshotRejectsMalformedPayloadObjects$' -count=1 passed: all 36 new cases retain baseline behavior.
@@ -144,7 +145,7 @@ Real-use evidence:
 - Actual DEM RUM query reducers processed 10,000-row synthetic journals in separately compiled current-source variants. The optimization does not erase the entire earlier regression against saved-scan queries; remaining consumer comparison stays with the parent task.
 
 Reviewer findings:
-- Main independent review follows the validated local commit.
+- Main independently reviewed 0d365e2: captured offset/extent checks remain before payload access; DATA type/minimum-size and decompression checks remain in the helper; full headers stay in index/capture paths; cancellation and callback lifetime are unchanged. The malformed-object matrix covers both layouts/access modes and baseline parity. No blocker or fix was identified.
 
 Same-failure scan:
 - readData callers needing hash/posting/FIELD metadata retain full headers; only entry payload traversal needs the minimal header.
@@ -156,7 +157,7 @@ Artifact maintenance gate:
 - AGENTS.md and runtime skills unchanged: no workflow or compatibility-policy change.
 - Specs and public docs unchanged: frozen bounds, payload behavior and lifecycle contracts remain identical.
 - documentation/indexed-snapshot-validation.md records source cause, controlled measurement, safety validation and claim limits.
-- No end-user/operator skills exist. This SOW and status summary track implementation and pending independent review.
+- No end-user/operator skills exist. This SOW is completed in done and the status summary records closure; the explicit commit-before-review instruction required a separate closure commit.
 
 Specs update:
 - Existing frozen-bounds and payload-lifetime requirements remain unchanged.
@@ -178,7 +179,7 @@ Follow-up mapping:
 
 ## Outcome
 
-The measured internal optimization and local validation are complete; main independent review follows the required implementation commit.
+The measured internal optimization is complete with passing local validation and independent review of 0d365e2. SDK broad payload traversal is 23.0 percent faster in the controlled fixture, and current DEM broad queries improve 18.2-19.6 percent with unchanged allocation behavior. No public semantic, format or Rust change was introduced; remaining consumer comparison work stays with the parent integration task.
 
 ## Lessons Extracted
 
@@ -186,7 +187,7 @@ Read only the metadata required by a traversal operation while preserving its co
 
 ## Followup
 
-Main independent review after the implementation commit; consumer integration remains separately owned.
+Main independent review completed without findings. Consumer integration, including the remaining comparison against its earlier saved-scan path, remains separately owned by the approved Netdata history-time task.
 
 ## Regression Log
 

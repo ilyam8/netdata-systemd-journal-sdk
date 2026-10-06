@@ -4,7 +4,7 @@ Last updated: 2026-10-06
 
 ## Current
 
-- SOW-0149 - Snapshot Payload Header Cost: in-progress. Measure and remove redundant Go payload header decoding while preserving snapshot contracts.
+- None.
 
 ## Pending
 
@@ -45,6 +45,8 @@ Last updated: 2026-10-06
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
+
+- SOW-0149 - Snapshot Payload Header Cost: completed. Commit 0d365e2 removes unnecessary Go DATA parsing in payload traversal; SDK broad fixture improves 23 percent and current DEM broad queries improve 18-20 percent. Contract tests, race checks, controlled benchmarks and independent review pass.
 
 - SOW-0148 - Indexed Snapshot Archive State: completed. Go IsArchived and Rust is_archived expose frozen metadata for approved recovery; real archive-transition tests, focused suites, published examples and bounded independent review pass. Local-only follow-up.
 
