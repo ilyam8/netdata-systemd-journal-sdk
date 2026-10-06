@@ -5,11 +5,13 @@ use journal::{IndexedSnapshot, IndexedSnapshotOptions, SnapshotControl, verify_i
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<_> = std::env::args().collect();
+    let args: Vec<_> = std::env::args_os().collect();
     if args.len() != 4 {
         return Err("expected journal-path field value".into());
     }
-    let (path, field, value) = (&args[1], args[2].as_bytes(), args[3].as_bytes());
+    let path = std::path::Path::new(&args[1]);
+    let field = args[2].to_str().ok_or("field must be UTF-8")?.as_bytes();
+    let value = args[3].to_str().ok_or("value must be UTF-8")?.as_bytes();
     let control = SnapshotControl::default();
     let started = Instant::now();
     verify_index(path, &control)?;

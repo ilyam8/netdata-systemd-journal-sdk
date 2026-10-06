@@ -2,8 +2,8 @@
 
 ## Status
 
-Status: completed
-Sub-state: SDK prerequisite complete and independently reviewed. Local implementation 501fd32 and validated review fixes cd0dfaf. Publication remains separate; consumer adoption is Netdata step12.
+Status: in-progress
+Sub-state: reopened for authorized saved-comment corrections on feat/indexed-snapshot at ac38ddb. Prior review remains evidence, but reproduced contract defects and live-validation claims are being corrected before renewed readiness. No GitHub state lookup, remote replies, push or publication.
 
 ## Requirements
 
@@ -225,3 +225,46 @@ Publish the reviewed SDK version through the user-owned release workflow, then e
 No completed claim was reopened. The experiment explicitly excluded production recovery certification; this finding comes from the subsequent production design.
 
 Approval recorded 2026-10-06: user replied "approve" to option 1 and the prerequisite SDK fixes. Gate ready before first source change.
+
+
+## Regression - 2026-10-06
+
+Authorization: user requested checking supplied .local/gh-review-bot-comments.md for feat/indexed-snapshot, ignoring GitHub state and fixing only real production defects, misleading claims and flaky tests. This fixes the approved contract; no new architecture or behavior fork is selected. The saved file contains 23 comments including repeated posting/empty-tail findings. Each receives an explicit accept/reject disposition in the final evidence ledger.
+
+Pre-Implementation Gate for corrections: ready.
+
+Problem / root-cause model:
+- Go FIELD capture currently loads the variable-length payload before checking captured object bounds. Local index walks also conflate absent values or future publication with malformed zero/missing links. Verify exact live-publication invariants before tightening checks.
+- Failure flags are set at broad writer entry points; investigate whether compact-capacity errors can occur before mutation and unnecessarily prevent a valid smaller retry. The Go 32-bit failure fixture may overflow integer size arithmetic.
+- Strict Go/Rust verification differs on empty indexes, empty tail boot metadata and repeated ENTRY DATA references. Establish production-reachable format cases before selecting corrections. A theoretical SHA-256 collision alone does not establish a production defect.
+- Documentation overstates fixed scratch/expired-view detection and retains temporary-only evidence; previous readiness lacks a recorded fresh Linux live matrix despite the active-SOW gate.
+
+Evidence reviewed: supplied comments only; current sources at ac38ddb; completed SOW0147/0148/0149; product-scope indexed snapshot/strict verification contract; project-journal-compatibility native indexes, live/verify matrix and synthetic-only rules; project-docs-authoring compiled example contract; prior benchmark/profile and conformance evidence. No live GitHub source is in scope.
+
+Affected surfaces: Go indexed snapshots, strict verifier and writer failure tests; Rust strict verifier/writer/snapshot tests and example; associated README/wiki/spec/validation claims. Existing APIs, file format, compiler minimums and reader/facade ownership remain unchanged.
+
+Existing patterns: reuse native header checks, committed extent helpers, snapshot publication bounds, strict posting cursors, mutation tracking and current deterministic synthetic fixtures. Avoid per-query graph validation or new persistent state.
+
+Risk and blast radius: rejecting valid concurrent append snapshots, silently returning partial indexed results, poisoning reusable writers, breaking historical empty-file compatibility and weakening failure preservation. All fixes must preserve valid append clipping and corruption errors. No host journal/service actions; no automatic recovery or data deletion.
+
+Sensitive data handling: synthetic files and public source only. Saved comments and raw logs stay ignored under .local. Tracked evidence uses repo-relative paths and sanitized aggregates.
+
+Implementation plan:
+1. Verify every supplied finding and same-cause related paths. Main owns docs/tracking/matrix validation; disjoint Go snapshot, Go writer/verifier and Rust source/test assignments investigate concrete cases. No overlapping writers or delegated commits.
+2. Reproduce accepted defects before changing source when feasible. Correct only established bugs/misleading contract claims/flaky synchronization; record rejected speculative or optional items with evidence.
+3. Run relevant Go/Rust suites, race/vet, snapshot/corruption regressions, portability and public examples. Run file-backed Linux live/verification matrices in a disposable task-owned environment where practical; if unavailable, qualify readiness rather than claim completion. Benchmark/profile changed hot paths with comparable workloads; document limits of stock/sibling comparison.
+4. Commit coherent validated implementation locally before independent cross-scope review under the standing native-subagent authorization; resolve verified findings. Audit, disposition all 23 comments, and close the reopened SOW only when acceptance criteria are met. No remote mutation.
+
+Validation plan: failing-before/passing-after regressions; exact result multisets and valid concurrent growth; Go 32-bit fixture validation; empty historical formats and Go/Rust agreement; scope-focused full suites; production-path benchmarks; documentation/example checks; Linux live stock journalctl/libsystemd plus Go/Rust readers, all feature modes and final verify including FSS, with counts/durations/version recorded.
+
+Artifact impact: correct wiki/READMEs and current spec for precise lifetime/memory/failure semantics; retain durable reproduction pointers and current performance/live evidence in documentation/indexed-snapshot-validation.md. SOW-status tracks reopened0147; no new SOW for a regression. No runtime skill/policy change is required unless a repeatable gap is established.
+
+Open decisions: none for restoring the approved contract. Scope is fixed by user instruction. A genuinely new public-contract fork must be raised with evidence before implementation.
+
+Validation and final dispositions: pending execution of the recorded correction plan; prior completed sections above are historical evidence, not a renewed readiness claim.
+
+User steering: fixes must eliminate the cause/class, rather than accumulate symptom patches. The correction uses three shared invariants: (1) validate captured extents before variable reads and refresh only ambiguous cached zero posting scalars after an observed live count; (2) poison only after possible storage or publishable in-memory mutation, including sealing/hash-depth bookkeeping; (3) verify graph populations and unique DATA×ENTRY membership consistently across layouts/languages. Valid concurrent append controls cover each repaired pointer/slot path.
+
+The required Linux arm64 build exposed an existing ABI assumption in Rust's two user/group-name lookup buffers (i8 versus libc::c_char). Both buffers now use the platform ABI type; searching rust/src found no further identical assumptions. This bounded portability correction is necessary to validate actual SDK binaries, with no public API or identity-discovery policy change. Baseline ac38ddb has the same two offending buffers; the Linux compiler reports E0308 before the correction.
+
+Correction validation checkpoint: full Go module tests and vet pass; full journal race 29.117 s; Linux arm64 unprivileged Rust public/core/directory suites 150/83/9 pass. All 33 wiki examples, 16-page structure and 78 harness tests pass. Stock257.13 live matrix18/18 and verifier matrix63/63 pass, with100entries/writer,10ms pacing, two polling readers each stock/Go/Rust and one libsystemd reader. Sealed first-run environment lacked libgcrypt20; corrected task image and complete rerun pass. No v260.1 or long-duration stress claim. Linux386 production and Windowsamd64 cross-builds pass;386testbinary requires an overlay for pre-existing unrelated test timestamp overflow, not a runtime pass. Before/after snapshots and isolated12-pair writers show no significant regression; current hot-path profile commands and attribution are in the validation report. Independent correction review remains pending.

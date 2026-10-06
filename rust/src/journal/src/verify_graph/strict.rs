@@ -52,9 +52,24 @@ impl GraphVerifier<'_> {
     pub(super) fn validate_strict_indexes(&self) -> Result<(), String> {
         // Parsing each walked table validates its header pointer and extent.
         // A header pointer alone can refer to an unpublished object after tail.
-        for kind in [OBJECT_TYPE_DATA_HASH_TABLE, OBJECT_TYPE_FIELD_HASH_TABLE] {
-            if self.counts[kind as usize] != 1 {
-                return Err("missing or duplicate committed hash table object".into());
+        for (kind, population, offset, size) in [
+            (
+                OBJECT_TYPE_DATA_HASH_TABLE,
+                self.data_objects.len(),
+                self.header.data_hash_table_offset,
+                self.header.data_hash_table_size,
+            ),
+            (
+                OBJECT_TYPE_FIELD_HASH_TABLE,
+                self.fields.len(),
+                self.header.field_hash_table_offset,
+                self.header.field_hash_table_size,
+            ),
+        ] {
+            match self.counts[kind as usize] {
+                0 if population == 0 && offset == 0 && size == 0 => {}
+                1 => {}
+                _ => return Err("missing or duplicate committed hash table object".into()),
             }
         }
         let mut arrays = HashSet::new();
@@ -75,9 +90,6 @@ impl GraphVerifier<'_> {
         let mut cursors = HashMap::new();
         let mut indexed_data = HashSet::new();
         let buckets = self.header.data_hash_table_size / HASH_ITEM_SIZE;
-        if buckets == 0 {
-            return Err("DATA hash table unavailable".into());
-        }
         for bucket in 0..buckets {
             let item = self.header.data_hash_table_offset + bucket * HASH_ITEM_SIZE;
             let mut current = u64_at_u64(self.source, item)?;
@@ -193,9 +205,6 @@ impl GraphVerifier<'_> {
             return Err("orphan ENTRY_ARRAY".into());
         }
         let buckets = self.header.field_hash_table_size / HASH_ITEM_SIZE;
-        if buckets == 0 {
-            return Err("FIELD hash table unavailable".into());
-        }
         let mut indexed_fields = HashSet::new();
         let mut field_data = HashSet::new();
         let mut names = HashSet::new();

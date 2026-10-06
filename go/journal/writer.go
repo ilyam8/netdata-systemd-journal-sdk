@@ -105,6 +105,7 @@ type Writer struct {
 	bootID            UUID
 	closed            bool
 	failure           error
+	appendMutated     bool
 	compression       int
 	compressThreshold int
 	compact           bool
@@ -425,10 +426,11 @@ func (w *Writer) appendPayloads(count int, payloadAt func(int) []byte, opts Entr
 		return err
 	}
 
-	// Validation above is reusable. From here even an error may leave partial
-	// objects or index links, so no subsequent operation may publish the header.
+	// Storage and sealing primitives mark the first possible mutation. Read-only
+	// lookup and capacity failures leave the writer reusable.
+	w.appendMutated = false
 	defer func() {
-		if err != nil {
+		if err != nil && w.appendMutated {
 			err = w.fail(err)
 		}
 	}()

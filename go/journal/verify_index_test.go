@@ -447,3 +447,45 @@ func TestVerifyIndexRejectsAscendingFieldChain(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyIndexRepeatedEntryDataReferences(t *testing.T) {
+	for _, count := range []int{1, 2, 6} {
+		t.Run(strconv.Itoa(count), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "repeated.journal")
+			opts := testOptions()
+			opts.Compact = true
+			w, err := Create(path, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 1; i <= count; i++ {
+				if err := w.Append([]Field{StringField("MESSAGE", "repeated")}, testEntryOptions(uint64(i))); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A compact one-item ENTRY has four padding bytes. Reuse them for a
+			// repeated DATA reference without changing any object or posting offsets.
+			for _, entry := range verifyIndexObjects(b, objectTypeEntry) {
+				binary.LittleEndian.PutUint64(b[entry+8:], entryObjectHeaderSize+2*compactEntryItemSize)
+				copy(b[entry+68:entry+72], b[entry+64:entry+68])
+				binary.LittleEndian.PutUint64(b[entry+56:], 0) // Duplicate hashes cancel.
+			}
+			if err := os.WriteFile(path, b, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := VerifyFile(path); err != nil {
+				t.Fatalf("compatibility verification: %v", err)
+			}
+			if err := VerifyIndex(context.Background(), path); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

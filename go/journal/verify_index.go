@@ -172,6 +172,11 @@ func (v *graphVerifier) validateIndex() error {
 				return fmt.Errorf("ENTRY %d references missing DATA", off)
 			}
 			cursor := cursors[dataOffset]
+			// Reverse postings represent distinct DATA-to-ENTRY membership, not
+			// the number of times an ENTRY repeats the same DATA reference.
+			if cursor.used > 0 && cursor.last == off {
+				continue
+			}
 			if cursor.used >= cursor.total {
 				return fmt.Errorf("ENTRY %d has missing reverse DATA posting", off)
 			}

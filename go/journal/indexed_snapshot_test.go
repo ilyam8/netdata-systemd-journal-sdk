@@ -581,3 +581,195 @@ func TestIndexedSnapshotRejectsMalformedPayloadObjects(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexedSnapshotRejectsMalformedPostings(t *testing.T) {
+	for _, compact := range []bool{false, true} {
+		for _, mutation := range []string{"count-zero", "array-zero", "slot-zero", "next-zero"} {
+			t.Run(fmt.Sprintf("compact=%v/%s", compact, mutation), func(t *testing.T) {
+				path, w := snapshotFixture(t, compact, CompressionNone, 8)
+				if err := w.Close(); err != nil {
+					t.Fatal(err)
+				}
+				b, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var data uint64
+				for off := binary.LittleEndian.Uint64(b[88:]); off <= binary.LittleEndian.Uint64(b[136:]); off += align8(binary.LittleEndian.Uint64(b[off+8:])) {
+					size := binary.LittleEndian.Uint64(b[off+8:])
+					payload := uint64(dataObjectHeaderSize)
+					if compact {
+						payload = compactDataObjectHeaderSize
+					}
+					if b[off] == objectTypeData && string(b[off+payload:off+size]) == "SCHEMA=1" {
+						data = off
+						break
+					}
+				}
+				if data == 0 {
+					t.Fatal("missing fixture data")
+				}
+				array := binary.LittleEndian.Uint64(b[data+48:])
+				switch mutation {
+				case "count-zero":
+					binary.LittleEndian.PutUint64(b[data+56:], 0)
+				case "array-zero":
+					binary.LittleEndian.PutUint64(b[data+48:], 0)
+				case "slot-zero":
+					if compact {
+						binary.LittleEndian.PutUint32(b[array+offsetArrayObjectHeaderSize:], 0)
+					} else {
+						binary.LittleEndian.PutUint64(b[array+offsetArrayObjectHeaderSize:], 0)
+					}
+				case "next-zero":
+					binary.LittleEndian.PutUint64(b[array+16:], 0)
+				}
+				if err := os.WriteFile(path, b, 0600); err != nil {
+					t.Fatal(err)
+				}
+				for _, mode := range []ReaderAccessMode{ReaderAccessReadAt, ReaderAccessMmap} {
+					s := openTestSnapshot(t, path, IndexedSnapshotOptions{Reader: DefaultReaderOptions().WithAccessMode(mode).WithWindowSize(4096).WithMaxWindows(1), CaptureFields: [][]byte{[]byte("SCHEMA")}})
+					for _, field := range []bool{false, true} {
+						count := 0
+						visit := func(*SnapshotEntry) error { count++; return nil }
+						if field {
+							err = s.VisitField(context.Background(), []byte("SCHEMA"), func([]byte) (bool, error) { return true, nil }, visit)
+						} else {
+							err = s.VisitMatch(context.Background(), []byte("SCHEMA"), []byte("1"), visit)
+						}
+						if !errors.Is(err, errInvalidJournal) {
+							t.Fatalf("malformed %s mode=%d field=%v returned %d/8 rows, err=%v", mutation, mode, field, count, err)
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
+type boundedSnapshotAccessor struct {
+	readerAccessor
+	end       uint64
+	violation error
+}
+
+func (a boundedSnapshotAccessor) tempSlice(off, size uint64) ([]byte, error) {
+	if off > a.end || size > a.end-off {
+		return nil, a.violation
+	}
+	return a.readerAccessor.tempSlice(off, size)
+}
+
+func TestIndexedSnapshotChecksFieldExtentBeforePayload(t *testing.T) {
+	path, w := snapshotFixture(t, false, CompressionNone, 1)
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for off := binary.LittleEndian.Uint64(b[88:]); off <= binary.LittleEndian.Uint64(b[136:]); off += align8(binary.LittleEndian.Uint64(b[off+8:])) {
+		size := binary.LittleEndian.Uint64(b[off+8:])
+		if b[off] == objectTypeField && string(b[off+fieldObjectHeaderSize:off+size]) == "SCHEMA" {
+			binary.LittleEndian.PutUint64(b[off+8:], uint64(len(b))-off)
+			break
+		}
+	}
+	if err := os.WriteFile(path, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := openTestSnapshot(t, path, IndexedSnapshotOptions{})
+	violation := errors.New("attempted payload read beyond captured extent")
+	s.reader.accessor = boundedSnapshotAccessor{s.reader.accessor, s.objectEnd, violation}
+	_, err = s.findField(context.Background(), []byte("SCHEMA"))
+	if !errors.Is(err, errInvalidJournal) || errors.Is(err, violation) {
+		t.Fatalf("FIELD bounds: %v", err)
+	}
+}
+
+// Model one retained pre-append window alongside newly loaded count bytes.
+// The file itself is produced only through successful Writer appends.
+type staleSnapshotAccessor struct {
+	readerAccessor
+	offset, scalarSize uint64
+	hits               int
+}
+
+func (a *staleSnapshotAccessor) stale(buf []byte, off uint64) {
+	for i := range buf {
+		at := off + uint64(i)
+		if at >= a.offset && at < a.offset+a.scalarSize {
+			buf[i] = 0
+			a.hits++
+		}
+	}
+}
+func (a *staleSnapshotAccessor) tempSlice(off, size uint64) ([]byte, error) {
+	b, err := a.readerAccessor.tempSlice(off, size)
+	if err != nil {
+		return nil, err
+	}
+	b = bytes.Clone(b)
+	a.stale(b, off)
+	return b, nil
+}
+func (a *staleSnapshotAccessor) readAt(buf []byte, off uint64) error {
+	if err := a.readerAccessor.readAt(buf, off); err != nil {
+		return err
+	}
+	a.stale(buf, off)
+	return nil
+}
+func TestIndexedSnapshotRefreshesStalePostingZeros(t *testing.T) {
+	for _, compact := range []bool{false, true} {
+		for _, count := range []int{1, 2, 5} {
+			t.Run(fmt.Sprintf("compact=%v/captured=%d", compact, count), func(t *testing.T) {
+				path, w := snapshotFixture(t, compact, CompressionNone, count)
+				s := openTestSnapshot(t, path, IndexedSnapshotOptions{CaptureFields: [][]byte{[]byte("SCHEMA")}})
+				off, d, err := s.findData(context.Background(), []byte("SCHEMA"), []byte("1"), true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				staleOff, size := off+48, uint64(8)
+				switch count {
+				case 2:
+					size = s.reader.offsetArrayItemSize()
+					staleOff = d.entryArrayOffset + offsetArrayObjectHeaderSize + size
+				case 5:
+					staleOff = d.entryArrayOffset + 16
+				}
+				var before [8]byte
+				if err := readFileAtFull(s.reader.file, before[:size], staleOff); err != nil {
+					t.Fatal(err)
+				}
+				if entryOffsetArrayItem(before[:], size) != 0 {
+					t.Fatal("fixture future offset already published")
+				}
+				appendSnapshotRows(t, w, count, 1)
+				a := &staleSnapshotAccessor{readerAccessor: s.reader.accessor, offset: staleOff, scalarSize: size}
+				s.reader.accessor = a
+				for _, field := range []bool{false, true} {
+					var rows []uint64
+					visit := func(e *SnapshotEntry) error { rows = append(rows, e.Seqnum); return nil }
+					if field {
+						err = s.VisitField(context.Background(), []byte("SCHEMA"), func([]byte) (bool, error) { return true, nil }, visit)
+					} else {
+						err = s.VisitMatch(context.Background(), []byte("SCHEMA"), []byte("1"), visit)
+					}
+					if err != nil || len(rows) != count {
+						t.Fatalf("field=%v rows=%v err=%v", field, rows, err)
+					}
+					for i, row := range rows {
+						if row != uint64(i+1) {
+							t.Fatalf("unexpected rows %v", rows)
+						}
+					}
+				}
+				if a.hits == 0 {
+					t.Fatal("stale bytes were not read")
+				}
+			})
+		}
+	}
+}

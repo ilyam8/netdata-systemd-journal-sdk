@@ -1092,7 +1092,10 @@ FIELD heads and exact-value counts under caller-owned writer exclusion.
 Go IsArchived and Rust is_archived MUST read the owned captured header state,
 returning true only for archived state. Later archival MUST NOT change that
 result. This metadata alone MUST NOT be treated as integrity certification.
-Traversal MUST use native indexes and bounded chunks without eager O(entries) offset lists;
+Traversal MUST use native indexes without eager O(entries) offset lists. Go uses
+bounded chunks; Rust retains offsets for one ENTRY, so scratch grows with entry
+width rather than file entry count. Selected compressed payloads require decoding
+space. Go guards expired payload visitation, not reads of exported metadata fields;
 FIELD predicates expose posting multiplicity rather than implicit union semantics.
 Callbacks MUST honor borrowed payload lifetimes and cooperative cancellation.
 Historical/layout/compression support is shared with existing readers.
@@ -1100,7 +1103,9 @@ Historical/layout/compression support is shared with existing readers.
 Strict VerifyIndex/verify_index MUST certify full bidirectional native index
 membership before uncertain files are reused; the compatibility verifier remains
 separate. This offline check has graph-sized time and memory, not query-open cost.
-Mutating errors MUST poison writers. Cleanup MUST preserve uncertain files without
+Errors after the first possible file or publication-state mutation MUST poison
+writers. Cleanup MUST preserve uncertain files without
 clean-state publication, archival retries, empty-file deletion or retention.
-Pre-mutation validation errors MUST remain reusable. Open itself MUST NOT silently
+Validation and capacity errors proven to precede mutation MUST leave writers
+reusable. Open itself MUST NOT silently
 incur a full strict verification pass. Applications own recovery/provenance policy.

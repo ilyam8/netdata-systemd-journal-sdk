@@ -622,7 +622,12 @@ impl JournalWriter {
             return Ok(());
         }
         // Set before any potentially partial I/O; only a fully published append clears it.
-        self.poisoned = true;
+        // Seal state is publication state too, even before the next file write.
+        if let Some(seal) = &self.seal {
+            if !self.first_tag_written || seal.need_evolve(realtime)? {
+                self.poisoned = true;
+            }
+        }
         self.ensure_first_tag(journal_file)?;
         self.maybe_append_tag(journal_file, realtime)?;
         *publication_ready = true;
@@ -682,6 +687,7 @@ impl JournalWriter {
             entry_offset,
             std::mem::size_of::<EntryObjectHeader>() as u64 + entry_payload_size,
         )?;
+        self.poisoned = true;
         let entry_size = {
             let size = Some(entry_payload_size);
             let mut entry_guard = journal_file.entry_mut(entry_offset, size)?;
@@ -844,6 +850,7 @@ impl JournalWriter {
         let data_offset = self.append_offset;
         let stored_payload = self.stored_data_payload(payload);
         self.ensure_data_object_fits(journal_file, data_offset, stored_payload.len() as u64)?;
+        self.poisoned = true;
         let data_size = {
             let mut data_guard =
                 journal_file.data_mut(data_offset, Some(stored_payload.len() as u64))?;

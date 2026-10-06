@@ -4417,7 +4417,7 @@ fn resolve_uid_name(raw: &str) -> Option<String> {
     let uid = raw.parse::<libc::uid_t>().ok()?;
     let mut pwd = std::mem::MaybeUninit::<libc::passwd>::uninit();
     let mut result = std::ptr::null_mut();
-    let mut buffer = vec![0i8; 16_384];
+    let mut buffer = vec![0 as libc::c_char; 16_384];
     let rc = unsafe {
         libc::getpwuid_r(
             uid,
@@ -4448,7 +4448,7 @@ fn resolve_gid_name(raw: &str) -> Option<String> {
     let gid = raw.parse::<libc::gid_t>().ok()?;
     let mut grp = std::mem::MaybeUninit::<libc::group>::uninit();
     let mut result = std::ptr::null_mut();
-    let mut buffer = vec![0i8; 16_384];
+    let mut buffer = vec![0 as libc::c_char; 16_384];
     let rc = unsafe {
         libc::getgrgid_r(
             gid,

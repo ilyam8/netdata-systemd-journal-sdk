@@ -172,11 +172,22 @@ func (s *IndexedSnapshot) findField(ctx context.Context, name []byte) (uint64, e
 		if err := s.checkOffset(off); err != nil {
 			return 0, err
 		}
-		h, value, err := r.readFieldObjectAt(off)
+		buf, err := r.readSlice(off, fieldObjectHeaderSize)
 		if err != nil {
 			return 0, err
 		}
+		h, err := parseFieldHeader(buf)
+		if err != nil {
+			return 0, err
+		}
+		if h.object.typ != objectTypeField || h.object.size < fieldObjectHeaderSize {
+			return 0, snapshotCorrupt("invalid FIELD object")
+		}
 		if err := s.checkObject(off, h.object.size); err != nil {
+			return 0, err
+		}
+		value, err := r.readSlice(off+fieldObjectHeaderSize, h.object.size-fieldObjectHeaderSize)
+		if err != nil {
 			return 0, err
 		}
 		if h.nextHashOffset != 0 && h.nextHashOffset <= off {

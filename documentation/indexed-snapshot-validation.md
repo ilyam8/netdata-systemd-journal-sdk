@@ -1,7 +1,8 @@
 # Indexed snapshot implementation evidence
 
 The source adds native-index snapshots and explicit strict verification in Go and
-Rust. This is SDK evidence; DEM adoption and published dependency validation are
+Rust. The final section records the October 6 saved-comment corrections and fresh
+Linux validation; the earlier sections retain the initial delivery evidence. This is SDK evidence; DEM adoption and published dependency validation are
 separate work. Measurements used synthetic files on macOS arm64 (Apple M4 Pro),
 Go 1.27.1 and Rust 1.91. No OS cache flush was performed.
 
@@ -153,3 +154,101 @@ size, unaligned/before-header/past-tail offsets, and invalid compressed payloads
 They pass against both baseline and optimized code, preserving existing rejection
 behavior before invoking a payload callback. Rust uses its existing borrowed DATA
 view; no equivalent copying regression was established or speculative change made.
+
+## Saved-comment corrections: October 6
+
+The fixes enforce shared invariants, rather than special-case reported errors:
+validate captured bounds before variable-length reads; refresh required cached
+zero posting scalars after observing a newer count; poison writers only after
+possible storage or publication-state mutation; and verify unique DATA×ENTRY
+membership and active empty-file metadata consistently. Go and Rust retain
+native index traversal and valid clipping of postings appended after capture.
+
+Correctness evidence on the corrected source:
+
+- Go module tests, module vet and the full journal race suite pass (race: 29.1 s).
+- Linux arm64 Rust suites pass as an unprivileged user: public SDK 150, core 83,
+  directory writer 9. Root execution invalidates the existing permission-denial
+  test; macOS still has the two previously documented root/wheel expectations.
+- All 33 wiki examples compile/run; 16 wiki pages and 78 harness tests pass.
+- The Linux live matrix passes 18/18 cases: Go/Rust writers; regular, zstd, xz,
+  lz4, compact and all compact compression variants, plus sealed/FSS. Each
+  writer produces 100 entries with 10 ms between appends (a one-second paced
+  append phase), with two concurrent polling readers per language/stock and one
+  libsystemd reader. All active reader groups observe entries; each final reader
+  and libsystemd stream returns all 100. Structural checks and stock final
+  verification pass, including the sealing key.
+- Stock systemd is 257.13 on Debian 13, in a disposable Linux arm64 container.
+  The first sealed run lacked the dynamically loaded Gcrypt runtime; installing
+  that test dependency makes the full matrix pass. This is bounded live evidence,
+  not a long-duration stress claim or a v260.1 live-validation claim.
+- The stock/Go/Rust positive and corruption verification matrix passes 63/63
+  checks. Stock also accepts a six-entry compact fixture that repeats one DATA
+  reference per ENTRY while recording one reverse posting per ENTRY.
+- Linux/386 production cross-build and Windows/amd64 build pass. A pre-existing
+  native-int timestamp overflow in reader_directory_test.go prevents the unchanged
+  386 test package from compiling; a temporary test-only expression overlay
+  permits cross-compilation. No 386 execution result is claimed.
+- Committed TestVerifyIndexRejectsInterruptedPublicationAfterReopen reproduces
+  both publication cut points and proves a subsequent reopen/append does not
+  repair them. Malformed posting, empty graph, capacity/retry, sealing and
+  synchronized live-growth regressions cover the corrected invariants.
+
+Reproduce the Linux matrices in an environment with Go, Rust >=1.91, stock
+journalctl, libsystemd development files and the stock Gcrypt runtime:
+
+```sh
+python3 tests/interoperability/run_live_matrix.py --entries 100 --writers go rust --readers stock go rust --poll-readers 2 --libsystemd-readers 1 --writer-delay-ms 10 --keep-files
+python3 tests/interoperability/run_verify_matrix.py --skip-build
+```
+
+The Linux build also exposed a pre-existing Rust ABI assumption: two user/group
+lookup buffers used i8, whereas libc::c_char is unsigned on Linux arm64. Both
+now use libc::c_char; identity lookup remains explicitly opt-in.
+
+### Current performance and profiles
+
+Six alternating before/after process pairs compare ac38ddb to the corrections,
+using the existing 100,000-row snapshot benchmark, 200 ms windows, Go 1.27.1,
+macOS arm64 Apple M4 Pro and no cache flush. Capture is 33.09 versus 33.05 us;
+exact selection 218.6 versus 221.8 us; FIELD selection 419.1 versus 415.2 us;
+all payloads 10.80 versus 10.74 ms. None differs significantly (p >= 0.485),
+and allocation counts/bytes are unchanged.
+
+Initial interleaved writer trials were noisy (structured medians 156.0 versus
+174.2 ms and raw 156.4 versus 168.9 ms, with widely overlapping ranges).
+A separate 12-pair alternating run of the existing 30,000-row/32-field mixed
+writer workload found no significant difference: structured 6.812 versus
+6.349 us/row (p=0.843), raw 6.637 versus 6.481 us/row (p=0.671). These results
+support no detected regression; they do not establish a throughput improvement.
+
+Profiles use the committed benchmark drivers. Redirect normal compiler/module
+caches to task-local storage; from go/:
+
+```sh
+mkdir -p ../.local/review-profile
+go test -c -o ../.local/review-profile/journal.test ./journal
+../.local/review-profile/journal.test -test.run='^$' -test.bench='^BenchmarkIndexedSnapshot$/^all-payloads$' -test.benchtime=3s -test.cpuprofile=../.local/review-profile/snapshot.cpu
+go tool pprof -top -focus='IndexedSnapshot.*VisitEntries' ../.local/review-profile/journal.test ../.local/review-profile/snapshot.cpu
+go build -o ../.local/review-profile/writer ./internal/testcmd/writer_core_bench
+../.local/review-profile/writer --output ../.local/review-profile/writer.journal --rows 300000 --api-mode structured-field --cpuprofile ../.local/review-profile/writer.cpu
+go tool pprof -top ../.local/review-profile/writer ../.local/review-profile/writer.cpu
+```
+
+The snapshot profile includes fixture construction, so filter to VisitEntries
+before attributing query cost. Its 3.26 s of query samples include 2.35 s under
+ENTRY-header parsing and 0.81 s under payload visitation (nested/cumulative,
+not additive categories). The normal broad-query profile has no fresh-posting
+read samples; those reads are limited to ambiguous zero links during growth.
+The append-loop-only writer profile contains 3.61 s of samples: 75.9% raw
+syscalls and 14.1% object-header parsing, with no separate mutation-marker
+hotspot. These are workload-specific attribution, not performance guarantees.
+
+A stock comparison is not a matching snapshot benchmark: journalctl has no
+caller-excluded capture API with this frozen population, borrowed callback and
+payload-selection contract. Process/output costs would confound such a ranking.
+The stock internal writer benchmark requires the pinned v260.1 source build,
+which is not present in this macOS run or the stock-257 validation container;
+no stock writer throughput comparison is claimed. Earlier Rust metadata-only
+snapshot numbers above also do not match Go's payload-visiting callbacks and
+must not be ranked against them.

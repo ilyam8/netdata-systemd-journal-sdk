@@ -192,10 +192,12 @@ func (w *Writer) updateHashChainDepth(typ uint8, head uint64) error {
 	switch typ {
 	case objectTypeData:
 		if depth > w.header.dataHashChainDepth {
+			w.appendMutated = true
 			w.header.dataHashChainDepth = depth
 		}
 	case objectTypeField:
 		if depth > w.header.fieldHashChainDepth {
+			w.appendMutated = true
 			w.header.fieldHashChainDepth = depth
 		}
 	}
@@ -231,6 +233,7 @@ func (w *Writer) findData(hash uint64, payload []byte) (uint64, resolvedDataLink
 		if header.nextHashOffset != 0 {
 			depth++
 			if depth > w.header.dataHashChainDepth {
+				w.appendMutated = true
 				w.header.dataHashChainDepth = depth
 			}
 		}
@@ -277,6 +280,7 @@ func (w *Writer) findField(hash uint64, payload []byte) (uint64, bool, error) {
 		if header.nextHashOffset != 0 {
 			depth++
 			if depth > w.header.fieldHashChainDepth {
+				w.appendMutated = true
 				w.header.fieldHashChainDepth = depth
 			}
 		}
@@ -415,6 +419,7 @@ func (w *Writer) writeUint64At(offset, value uint64) error {
 			if err != nil {
 				return err
 			}
+			w.appendMutated = true
 			binary.LittleEndian.PutUint64(dst, value)
 			return nil
 		}
@@ -430,6 +435,7 @@ func (w *Writer) writeUint32At(offset uint64, value uint32) error {
 			if err != nil {
 				return err
 			}
+			w.appendMutated = true
 			binary.LittleEndian.PutUint32(dst, value)
 			return nil
 		}

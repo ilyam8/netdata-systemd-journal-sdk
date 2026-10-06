@@ -12,11 +12,14 @@ func (s *IndexedSnapshot) VisitMatch(ctx context.Context, name, value []byte, vi
 		return err
 	}
 	defer func() { s.busy = false }()
-	_, d, err := s.findData(ctx, name, value, false)
+	off, d, err := s.findData(ctx, name, value, false)
 	if err != nil {
 		return err
 	}
-	return s.visitPostings(ctx, d, visit)
+	if off == 0 {
+		return ctx.Err()
+	}
+	return s.visitPostings(ctx, off, d, visit)
 }
 
 // VisitField applies accept to each distinct value from a declared FIELD head,
@@ -56,7 +59,7 @@ func (s *IndexedSnapshot) VisitField(ctx context.Context, name []byte, accept fu
 			return err
 		}
 		if accepted {
-			if err := s.visitPostings(ctx, d, visit); err != nil {
+			if err := s.visitPostings(ctx, off, d, visit); err != nil {
 				return err
 			}
 		}
@@ -75,9 +78,9 @@ func (s *IndexedSnapshot) VisitEntries(ctx context.Context, visit func(*Snapshot
 	return s.visitArrays(ctx, s.reader.header.entryArrayOffset, s.reader.header.nEntries, 0, false, visit)
 }
 
-func (s *IndexedSnapshot) visitPostings(ctx context.Context, d dataHeader, visit func(*SnapshotEntry) error) error {
+func (s *IndexedSnapshot) visitPostings(ctx context.Context, off uint64, d dataHeader, visit func(*SnapshotEntry) error) error {
 	if d.nEntries == 0 {
-		return ctx.Err()
+		return snapshotCorrupt("DATA has no committed posting")
 	}
 	if d.entryOffset > s.maxEntry {
 		return ctx.Err()
@@ -85,13 +88,35 @@ func (s *IndexedSnapshot) visitPostings(ctx context.Context, d dataHeader, visit
 	if err := s.visitEntry(ctx, d.entryOffset, visit); err != nil {
 		return err
 	}
-	// A DATA header may span independently refreshed windows during append.
-	// A missing array still proves there was none in the captured population:
-	// append-only writers never remove an existing pointer.
-	if d.nEntries == 1 || d.entryArrayOffset == 0 {
+	if d.nEntries == 1 {
 		return nil
 	}
+	if d.entryArrayOffset == 0 {
+		var err error
+		d.entryArrayOffset, err = s.refreshPostingOffset(off+48, 8)
+		if err != nil {
+			return err
+		}
+	}
 	return s.visitArrays(ctx, d.entryArrayOffset, d.nEntries-1, d.entryOffset, true, visit)
+}
+
+// Cached windows can pair a new count with an old zero pointer or slot.
+// Writers publish these offsets before the count, so a fresh zero is corrupt.
+// Read only that scalar, bypassing cached windows; future offsets still clip.
+func (s *IndexedSnapshot) refreshPostingOffset(off, size uint64) (uint64, error) {
+	if off < s.reader.header.headerSize || off > s.objectEnd || size > s.objectEnd-off {
+		return 0, snapshotCorrupt("posting scalar outside committed bounds")
+	}
+	var buf [8]byte
+	if err := readFileAtFull(s.reader.file, buf[:size], off); err != nil {
+		return 0, err
+	}
+	value := entryOffsetArrayItem(buf[:], size)
+	if value == 0 {
+		return 0, snapshotCorrupt("missing committed posting offset")
+	}
+	return value, nil
 }
 
 func (s *IndexedSnapshot) visitArrays(ctx context.Context, off, count, previous uint64, clip bool, visit func(*SnapshotEntry) error) error {
@@ -100,7 +125,7 @@ func (s *IndexedSnapshot) visitArrays(ctx context.Context, off, count, previous 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if clip && (off == 0 || off > s.maxObject) {
+		if clip && off > s.maxObject {
 			return nil
 		}
 		a, capacity, err := s.arrayHeader(off)
@@ -119,7 +144,13 @@ func (s *IndexedSnapshot) visitArrays(ctx context.Context, off, count, previous 
 			}
 			for i := uint64(0); i < chunk; i++ {
 				entry := entryOffsetArrayItem(buf[i*size:], size)
-				if clip && (entry == 0 || entry > s.maxEntry) {
+				if clip && entry == 0 {
+					entry, err = s.refreshPostingOffset(off+offsetArrayObjectHeaderSize+(pos+i)*size, size)
+					if err != nil {
+						return err
+					}
+				}
+				if clip && entry > s.maxEntry {
 					return nil
 				}
 				if entry <= previous || entry > s.maxEntry {
@@ -133,6 +164,15 @@ func (s *IndexedSnapshot) visitArrays(ctx context.Context, off, count, previous 
 			pos += chunk
 		}
 		count -= used
+		if clip && count > 0 && a.nextArrayOffset == 0 {
+			a.nextArrayOffset, err = s.refreshPostingOffset(off+16, 8)
+			if err != nil {
+				return err
+			}
+			if a.nextArrayOffset <= off {
+				return snapshotCorrupt("invalid entry-array progress")
+			}
+		}
 		off = a.nextArrayOffset
 	}
 	return ctx.Err()

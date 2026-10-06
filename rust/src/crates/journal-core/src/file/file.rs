@@ -759,6 +759,14 @@ impl<M: MemoryMap> JournalFile<M> {
         Ok(src.to_vec())
     }
 
+    /// Reads through the backing file, bypassing mapped or copied windows.
+    #[doc(hidden)]
+    pub fn read_fresh_bytes_at(&self, offset: u64, output: &mut [u8]) -> Result<()> {
+        self.window_manager
+            .borrow_mut_checked()?
+            .read_exact_at(offset, output)
+    }
+
     #[doc(hidden)]
     pub fn read_unaligned_bytes_at(&self, offset: u64, size: u64) -> Result<Vec<u8>> {
         let window_manager = self.window_manager.borrow_mut_checked()?;

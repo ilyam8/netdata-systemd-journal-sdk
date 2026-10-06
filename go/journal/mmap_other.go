@@ -27,9 +27,16 @@ func newMappedArena(file *os.File, size uint64) (*mappedArena, error) {
 	return arena, nil
 }
 
-func (a *mappedArena) remap(size uint64) error {
+func checkArenaSize(size uint64) error {
 	if size > uint64(int64(^uint64(0)>>1)) {
 		return fmt.Errorf("%w: mapped arena too large", errInvalidJournal)
+	}
+	return nil
+}
+
+func (a *mappedArena) remap(size uint64) error {
+	if err := checkArenaSize(size); err != nil {
+		return err
 	}
 	if err := a.file.Truncate(int64(size)); err != nil {
 		return err
@@ -58,14 +65,6 @@ func (a *mappedArena) readAt(dst []byte, offset uint64) error {
 		return err
 	}
 	_, err := a.file.ReadAt(dst, int64(offset))
-	return err
-}
-
-func (a *mappedArena) writeAt(offset uint64, src []byte) error {
-	if err := a.checkBounds(offset, uint64(len(src))); err != nil {
-		return err
-	}
-	_, err := a.file.WriteAt(src, int64(offset))
 	return err
 }
 

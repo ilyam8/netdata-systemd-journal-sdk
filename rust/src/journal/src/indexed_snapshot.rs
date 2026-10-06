@@ -185,6 +185,7 @@ impl IndexedSnapshot {
             || header.head_entry_realtime != 0
             || header.tail_entry_realtime != 0
             || header.tail_entry_monotonic != 0
+            || (header.compatible_flags & 2 != 0 && header.tail_entry_boot_id != [0; 16])
         {
             return Err(corrupt("nonempty metadata for empty snapshot"));
         }
@@ -444,10 +445,24 @@ impl IndexedSnapshot {
         };
         visit(&mut entry)
     }
-    // Query-time DATA counts are mutable upper bounds. Valid append-only
-    // graphs preserve every captured posting: a missing future link/slot or an
-    // offset beyond the captured tail ends the captured prefix. Global scans
-    // use frozen counts and remain strict; capture itself validates counts.
+    // A live count can be newer than a copied pointer or slot. Writers publish
+    // links before counts: refresh required zeros before treating them as damage.
+    fn required_posting(
+        &self,
+        cached: Option<NonZeroU64>,
+        position: u64,
+        compact: bool,
+    ) -> Result<NonZeroU64> {
+        if let Some(offset) = cached {
+            return Ok(offset);
+        }
+        let mut bytes = [0; 8];
+        let size = if compact { 4 } else { 8 };
+        self.file
+            .read_fresh_bytes_at(position, &mut bytes[..size])?;
+        NonZeroU64::new(u64::from_le_bytes(bytes))
+            .ok_or_else(|| corrupt("missing required posting"))
+    }
     fn visit_array(
         &self,
         mut current: Option<NonZeroU64>,
@@ -461,11 +476,12 @@ impl IndexedSnapshot {
         let mut chunk = Vec::with_capacity(256);
         while remaining > 0 {
             control.check()?;
-            let Some(offset) = current else {
-                if clip {
-                    return Ok(());
+            let offset = match current {
+                Some(offset) => offset,
+                None if clip && previous_array != 0 => {
+                    self.required_posting(None, previous_array + 16, false)?
                 }
-                return Err(corrupt("missing posting array"));
+                None => return Err(corrupt("missing posting array")),
             };
             if clip && offset.get() > number(self.header.tail_object_offset) {
                 return Ok(());
@@ -488,14 +504,23 @@ impl IndexedSnapshot {
                 {
                     let array = self.file.offset_array_ref(offset)?;
                     for index in start..used.min(start + 256) {
-                        match array.items.get(index) {
-                            Some(entry) => chunk.push(entry),
-                            None if clip => break,
-                            None => return Err(corrupt("zero posting")),
-                        }
+                        chunk.push(array.items.get(index));
                     }
                 }
-                for &entry in &chunk {
+                for (index, &cached) in chunk.iter().enumerate() {
+                    let entry = match cached {
+                        Some(entry) => entry,
+                        None if clip => {
+                            let compact = self.header.incompatible_flags & 16 != 0;
+                            let width = if compact { 4 } else { 8 };
+                            self.required_posting(
+                                None,
+                                offset.get() + 24 + (start + index) as u64 * width,
+                                compact,
+                            )?
+                        }
+                        None => return Err(corrupt("zero posting")),
+                    };
                     if entry.get() <= last {
                         return Err(corrupt("postings do not progress"));
                     }
@@ -504,9 +529,6 @@ impl IndexedSnapshot {
                     }
                     self.emit(entry, control, visit)?;
                     last = entry.get();
-                }
-                if chunk.len() < used.min(start + 256) - start {
-                    return Ok(());
                 }
             }
             remaining -= used as u64;
@@ -530,6 +552,11 @@ impl IndexedSnapshot {
             return Ok(());
         }
         self.emit(first, control, visit)?;
+        let array = if count > 1 {
+            Some(self.required_posting(array, offset.get() + 48, false)?)
+        } else {
+            array
+        };
         self.visit_array(array, count - 1, first.get(), true, control, visit)
     }
     pub fn visit_match(

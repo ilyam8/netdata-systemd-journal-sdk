@@ -278,9 +278,10 @@ fn indexed_capture_rejects_unpublished_postings_and_tail_hints() {
 #[test]
 fn indexed_snapshot_survives_concurrent_append_and_array_growth() {
     for compact in [false, true] {
-        for initial in [1, 2, 512] {
+        for initial in [1, 2, 5, 512] {
             let (ready_tx, ready_rx) = std::sync::mpsc::channel();
             let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+            let (appended_tx, appended_rx) = std::sync::mpsc::channel();
             let (done_tx, done_rx) = std::sync::mpsc::channel();
             let thread = std::thread::spawn(move || {
                 let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::Zstd);
@@ -288,9 +289,12 @@ fn indexed_snapshot_survives_concurrent_append_and_array_growth() {
                     append(&mut journal, &mut writer, index);
                 }
                 ready_tx.send(path).unwrap();
-                resume_rx.recv().unwrap();
-                for index in initial + 1..=4096 {
-                    append(&mut journal, &mut writer, index);
+                for batch in 0..8 {
+                    resume_rx.recv().unwrap();
+                    for index in initial + batch * 512 + 1..=initial + (batch + 1) * 512 {
+                        append(&mut journal, &mut writer, index);
+                    }
+                    appended_tx.send(()).unwrap();
                 }
                 done_rx.recv().unwrap();
             });
@@ -299,6 +303,7 @@ fn indexed_snapshot_survives_concurrent_append_and_array_growth() {
             let mut snapshot = IndexedSnapshot::open(
                 &path,
                 IndexedSnapshotOptions {
+                    reader: ReaderOptions::snapshot().with_window_size(4096),
                     capture_fields: vec![b"MESSAGE".to_vec()],
                     capture_values: vec![(b"SCHEMA".to_vec(), b"1".to_vec())],
                     ..Default::default()
@@ -306,11 +311,19 @@ fn indexed_snapshot_survives_concurrent_append_and_array_growth() {
                 &control,
             )
             .unwrap();
-            resume_tx.send(()).unwrap();
             for _ in 0..8 {
                 let mut seqnums = Vec::new();
                 snapshot
                     .visit_match(b"SCHEMA", b"1", &control, |entry| {
+                        if seqnums.is_empty() {
+                            // The writer cannot finish this batch before traversal
+                            // starts; keep this entry alive across append/remap.
+                            resume_tx.send(()).unwrap();
+                            entry.visit_payloads(|_| Ok(()))?;
+                            appended_rx
+                                .recv_timeout(std::time::Duration::from_secs(30))
+                                .unwrap();
+                        }
                         entry.visit_payloads(|_| Ok(()))?;
                         seqnums.push(entry.metadata().seqnum);
                         Ok(())
@@ -451,4 +464,122 @@ fn indexed_snapshot_offline_is_not_archived() {
     let snapshot =
         IndexedSnapshot::open(&path, Default::default(), &SnapshotControl::default()).unwrap();
     assert!(!snapshot.is_archived());
+}
+
+#[test]
+fn strict_index_accepts_empty_indexless_journal() {
+    for compact in [false, true] {
+        let (_dir, path, mut journal, _writer) = fixture(compact, Compression::None);
+        let header = journal.journal_header_mut();
+        header.data_hash_table_offset = None;
+        header.data_hash_table_size = None;
+        header.field_hash_table_offset = None;
+        header.field_hash_table_size = None;
+        header.tail_object_offset = None;
+        header.n_objects = 0;
+        verify_index(&path, &SnapshotControl::default()).unwrap();
+    }
+}
+
+#[test]
+fn strict_index_empty_boot_metadata_respects_compatible_flag() {
+    let (_dir, path, mut journal, _writer) = fixture(false, Compression::None);
+    journal.journal_header_mut().tail_entry_boot_id = *test_uuid(7).as_bytes();
+    let control = SnapshotControl::default();
+    assert!(verify_index(&path, &control).is_err());
+    assert!(IndexedSnapshot::open(&path, IndexedSnapshotOptions::default(), &control).is_err());
+    journal.journal_header_mut().compatible_flags &= !2;
+    verify_index(&path, &control).unwrap();
+    IndexedSnapshot::open(&path, IndexedSnapshotOptions::default(), &control).unwrap();
+}
+
+#[test]
+fn indexed_queries_reject_missing_captured_postings() {
+    use std::io::{Seek, SeekFrom, Write};
+    for compact in [false, true] {
+        for damage in ["first array", "slot", "continuation"] {
+            let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+            for index in 1..=6 {
+                append(&mut journal, &mut writer, index);
+            }
+            let data = journal
+                .find_data_offset(journal.hash(b"SCHEMA=1"), b"SCHEMA=1")
+                .unwrap()
+                .unwrap();
+            let array = journal
+                .data_ref(data)
+                .unwrap()
+                .header
+                .entry_array_offset
+                .unwrap();
+            match damage {
+                "first array" => {
+                    journal
+                        .data_mut(data, None)
+                        .unwrap()
+                        .header
+                        .entry_array_offset = None
+                }
+                "continuation" => {
+                    journal
+                        .offset_array_mut(array, None)
+                        .unwrap()
+                        .header
+                        .next_offset_array = None
+                }
+                _ => {
+                    let mut bytes = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+                    bytes.seek(SeekFrom::Start(array.get() + 24)).unwrap();
+                    bytes
+                        .write_all(if compact { &[0; 4] } else { &[0; 8] })
+                        .unwrap();
+                }
+            }
+            let control = SnapshotControl::default();
+            let mut snapshot = IndexedSnapshot::open(
+                &path,
+                IndexedSnapshotOptions {
+                    capture_fields: vec![b"SCHEMA".to_vec()],
+                    ..Default::default()
+                },
+                &control,
+            )
+            .unwrap();
+            assert!(
+                snapshot
+                    .visit_match(b"SCHEMA", b"1", &control, |_| Ok(()))
+                    .is_err(),
+                "accepted missing {damage}"
+            );
+            assert!(
+                snapshot
+                    .visit_field(b"SCHEMA", &control, |_| Ok(true), |_| Ok(()))
+                    .is_err(),
+                "FIELD accepted missing {damage}"
+            );
+        }
+    }
+}
+
+#[test]
+fn strict_index_rejects_missing_or_duplicate_populated_tables() {
+    use std::io::{Seek, SeekFrom, Write};
+    for compact in [false, true] {
+        for duplicate in [false, true] {
+            let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+            append(&mut journal, &mut writer, 1);
+            let header = journal.journal_header_mut();
+            if duplicate {
+                // Reclassify the FIELD table as a second DATA table.
+                let offset = header.field_hash_table_offset.unwrap().get() - 16;
+                let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+                file.seek(SeekFrom::Start(offset)).unwrap();
+                file.write_all(&[4]).unwrap();
+            } else {
+                header.data_hash_table_offset = None;
+                header.data_hash_table_size = None;
+            }
+            assert!(verify_index(&path, &SnapshotControl::default()).is_err());
+        }
+    }
 }

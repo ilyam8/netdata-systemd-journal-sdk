@@ -2,9 +2,12 @@ package journal
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -282,5 +285,132 @@ func TestLogPoisonedCleanupSkipsRetention(t *testing.T) {
 	}
 	if !bytes.Equal(before, after) {
 		t.Fatal("cleanup changed uncertain active")
+	}
+}
+
+func TestWriterCompactPreflightFailureIsReusable(t *testing.T) {
+	for _, raw := range []bool{false, true} {
+		for _, sealed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("raw=%v/sealed=%v", raw, sealed), func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), "compact.journal")
+				opts := testOptions()
+				opts.Compact = true
+				if sealed {
+					opts.Seal = testSealOpts()
+				}
+				w, err := Create(path, opts)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer w.Close()
+				appendEntry := func(value string, clock uint64) error {
+					opts := EntryOptions{RealtimeUsec: 1500000, MonotonicUsec: clock}
+					if raw {
+						return w.AppendRaw([][]byte{[]byte("MESSAGE=" + value)}, opts)
+					}
+					return w.Append([]Field{StringField("MESSAGE", value)}, opts)
+				}
+				if err := appendEntry("existing", 1); err != nil {
+					t.Fatal(err)
+				}
+				before, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Model exhausted compact offsets without a multi-gigabyte fixture. All
+				// referenced DATA already exists, so rejection precedes any object write.
+				offset := w.appendOffset
+				w.appendOffset = journalCompactSizeMax - 32
+				err = appendEntry("existing", 2)
+				w.appendOffset = offset
+				if err == nil || errors.Is(err, ErrWriterFailed) {
+					t.Fatalf("preflight = %v", err)
+				}
+				after, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(before, after) {
+					t.Fatal("preflight changed journal bytes")
+				}
+				if err := appendEntry("existing", 2); err != nil {
+					t.Fatalf("retry = %v", err)
+				}
+				if err := w.CloseOffline(); err != nil {
+					t.Fatal(err)
+				}
+				if err := VerifyIndex(context.Background(), path); err != nil {
+					t.Fatal(err)
+				}
+				if sealed {
+					if err := VerifyFileWithKey(path, testVerificationKey(opts.Seal)); err != nil {
+						t.Fatal(err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestWriterInitialHashTableCapacity(t *testing.T) {
+	for _, fieldTable := range []bool{false, true} {
+		for _, negative := range []bool{false, true} {
+			t.Run(fmt.Sprintf("field=%v/negative=%v", fieldTable, negative), func(t *testing.T) {
+				opts := testOptions()
+				opts.Compact = true
+				buckets := -1
+				if !negative {
+					// Both cases overflow multiplication by hashItemSize in a native int.
+					shift := uint(strconv.IntSize - 4)
+					buckets = int(1) << shift
+				}
+				if fieldTable {
+					opts.FieldHashTableBuckets = buckets
+				} else {
+					opts.DataHashTableBuckets = buckets
+				}
+				w, err := Create(filepath.Join(t.TempDir(), "oversized.journal"), opts)
+				if w != nil {
+					defer w.Close()
+				}
+				if err == nil {
+					t.Fatal("invalid hash table capacity accepted")
+				}
+			})
+		}
+	}
+}
+
+func TestWriterSealingFailureBlocksMutation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sealed.journal")
+	opts := testOptionsWithSeal(testSealOpts())
+	opts.Compact = true
+	w, err := Create(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if err := w.Append([]Field{StringField("MESSAGE", "existing")}, EntryOptions{RealtimeUsec: 1500000, MonotonicUsec: 1}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Advancing the epoch mutates HMAC state before TAG capacity is checked.
+	// Model the compact boundary without mapping a multi-gigabyte fixture.
+	w.appendOffset = journalCompactSizeMax - 32
+	if err := w.Append([]Field{StringField("MESSAGE", "existing")}, EntryOptions{RealtimeUsec: 2500000, MonotonicUsec: 2}); !errors.Is(err, ErrWriterFailed) {
+		t.Fatalf("sealing failure = %v", err)
+	}
+	if err := w.CloseOffline(); !errors.Is(err, ErrWriterFailed) {
+		t.Fatalf("CloseOffline = %v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("cleanup rewrote journal after sealing failure")
 	}
 }

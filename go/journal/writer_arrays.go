@@ -324,6 +324,7 @@ func (w *Writer) appendToMappedCompactDataTail(
 		return mappedCompactTailFull, capacity, nil
 	}
 	itemOffset := uint64(offsetArrayObjectHeaderSize) + tailEntries*itemSize
+	w.appendMutated = true
 	binary.LittleEndian.PutUint32(span[itemOffset:itemOffset+itemSize], uint32(entryOffset))
 	return mappedCompactTailAppended, capacity, nil
 }

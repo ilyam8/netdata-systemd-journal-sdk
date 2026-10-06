@@ -13,9 +13,14 @@ existing contracts; this API does not change their snapshot behavior.
 | Open/capture | Header, global array headers and declared FIELD heads/value counts; no entry-offset vector |
 | Exact match | Native DATA hash lookup, then that value's original postings |
 | FIELD predicate | Captured FIELD's distinct values, then accepted values' original postings |
-| All entries | Lazy global ENTRY-array traversal; O(entries) work with bounded scratch |
+| All entries | Lazy global ENTRY-array traversal; O(entries) work without a whole-file offset vector |
 | Payload visitor | Decode only the visited entry's payloads; bytes live only during the callback |
 | Strict verification | Offline graph certification with time and memory proportional to graph size |
+
+Traversal scratch does not grow with the total entry count. Rust copies the current
+entry's DATA offsets, so its scratch grows with the widest visited entry; payload
+decompression also needs space for the selected value. Go uses bounded posting
+and entry-offset chunks. These are not fixed total-memory guarantees.
 
 FIELD traversal is a posting traversal: a row with two accepted values is
 visited twice. There is no implicit deduplication, sorting or multi-file merge.
@@ -43,9 +48,10 @@ state alone does not establish clean provenance or index integrity.
 
 Entry views and payload slices MUST NOT be retained. Copy what is needed before
 the callback returns. A snapshot has one consumer; nested snapshot operations
-are unsupported. Rust scopes the borrows. Go detects nested operations and use
-of an entry view outside its callback, but retaining a reused view is still a
-caller error. Independent queries use separate snapshots.
+are unsupported. Rust scopes the borrows. Go detects nested operations and rejects
+`VisitPayloads` on an expired entry view. Its exported metadata fields remain
+readable, and retaining a reused view is still a caller error; copy needed
+metadata during the callback. Independent queries use separate snapshots.
 
 Context/control cancellation is checked between objects, chunks and payloads.
 One syscall or decompression is cooperative, not interruptible. Regular and
