@@ -2,8 +2,8 @@
 
 ## Status
 
-Status: completed
-Sub-state: saved-comment corrections implemented in dbfc60a, validated and independently reviewed. Final docs clarify baseline behavior and record current performance/live evidence. No GitHub state lookup, remote replies, push or publication.
+Status: in-progress
+Sub-state: reopened for the authorized local-master rebase and second supplied-comment review. Two saved bot comments and four explicitly linked human comments fetched with curl/GitHub REST are being verified; no push or remote review mutation.
 
 ## Requirements
 
@@ -276,3 +276,21 @@ Final review disposition: root causes are addressed at shared validation/mutatio
 Completion assessment: approved clean end state and scope rechecked; shared-boundary fixes, coupled docs/spec/tests, direct validation and three independent cross-scope reviews are complete. No verified blocker remains. Existing external publication/consumer release staging remains unchanged; no new in-scope work is deferred. Theoretical SHA-256 collision hardening is rejected, not deferred. SOW audit passes; completed file returns to done.
 
 Correction reference reconciliation: `rg -n 'arena\.writeAt' go/journal` returns no references to the removed duplicate arena write wrappers. `rg -n 'appendMutated|required_posting|refreshPostingOffset|read_fresh_bytes_at' go/journal rust/src` returns 32 references, all retained mutation tracking, required-offset helpers/callers or regression checks. The canonical primitives replace duplicate wrappers; no compatibility path or deferred coupled reference remains.
+
+## Second review corrections - 2026-10-06
+
+Authorization: user requested rebase onto local master, reassess the two current saved bot comments, fetch four linked human comments using curl/GitHub API, and fix only real production issues, misleading statements or flaky tests. Prior direction to eliminate shared causes remains in force. Request fixes the goal; no new user-owned architecture decision is selected.
+
+Pre-Implementation Gate for second corrections: ready.
+
+Target: preserve all approved snapshot/lifecycle behavior and local master's publication receipt; reject unsafe/inconsistent declared file extents and empty-file metadata while permitting lawful inherited sequence counters; make review dispositions inspectable in tracked sanitized evidence. Existing compatibility contracts and historical header semantics must be checked explicitly. No automatic repair, data deletion, publication or GitHub replies/resolutions.
+
+Evidence: current branch7657e62; local master5cb48c8 adds publication receipt/status docs only; current saved bot file; REST comments4192562428/2436/2442/2451 from netdata/systemd-journal-sdk PR5, originally reviewing280056d. Comments are leads until reproduced. Relevant sources: strict header/object graph validators, snapshot capture, append-open sizing and mapped arenas, current empty/historical tests, published SDK spec. Skills: project-agent-orchestration, project-journal-compatibility and selected-comment PR review workflow.
+
+Root-cause model: physical-file bounds are not a substitute for the format's declared arena bounds. Empty-file validation must distinguish current-file ENTRY metadata from an inherited chain sequence counter and historical boot semantics. Reuse one invariant owner per language across affected strict/snapshot paths where their contracts match; avoid one-off header-field exceptions or changing compatibility verification merely to align strict checks.
+
+Plan: (1) record this gate, rebase onto local master, reconcile status docs without dropping either receipt; (2) reproduce findings and inspect same-cause paths, then implement bounded corrections with regular/compact and historical positive/negative cases; (3) add tracked per-comment disposition, validate affected Go/Rust paths and stock interoperability/byte preservation, commit coherent fixes before independent review; (4) complete needed review, audit and close SOW. No unrelated work or dependency additions.
+
+Validation: failing-before/passing-after tests; exact unchanged bytes on rejected guarded reuse; inherited sequence positive controls and frozen empty snapshots after later appends; Go/Rust strict parity and stock checks where applicable; full affected suites, race/vet as relevant. Preserve earlier live/performance evidence where no assumption changes; rerun relevant matrices for affected extent/reopen paths. Rebase source tree must equal the pre-rebase source tree because master changes docs only.
+
+Risk: false rejection of valid rotated or historical files, accidental shrink on reopen, and false recovery certification. Core runtime remains pure file-format code. All fixtures use synthetic identities and task-local files; no host journal/service action. Raw API responses remain ignored in .local; tracked summary excludes reviewer identities/personal data. Native independent review remains authorized. Open decisions: none unless investigation reveals a materially different public contract.
