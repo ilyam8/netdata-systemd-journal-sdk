@@ -36,6 +36,11 @@ needed. Declarations are copied. A captured value distinguishes absent from
 present, and its count does not change after append. Asking for an undeclared
 count or FIELD is an error. Exact-match traversal itself needs no declaration.
 
+Go `IsArchived()` and Rust `is_archived()` report whether the captured header was
+archived; online and offline states return false. The result remains fixed if
+the file is archived after capture and requires no extra file read. Archived
+state alone does not establish clean provenance or index integrity.
+
 Entry views and payload slices MUST NOT be retained. Copy what is needed before
 the callback returns. A snapshot has one consumer; nested snapshot operations
 are unsupported. Rust scopes the borrows. Go detects nested operations and use
@@ -66,7 +71,7 @@ if err != nil { return err }
 defer snapshot.Close()
 count, err := snapshot.CapturedValue([]byte("PRIORITY"), []byte("6"))
 if err != nil { return err }
-fmt.Println("committed", snapshot.EntryCount(), "matching", count.EntryCount)
+fmt.Println("committed", snapshot.EntryCount(), "matching", count.EntryCount, "archived", snapshot.IsArchived())
 return snapshot.VisitMatch(ctx, []byte("PRIORITY"), []byte("6"),
     func(entry *journal.SnapshotEntry) error {
         return entry.VisitPayloads(func(payload []byte) error {
@@ -100,7 +105,7 @@ let mut snapshot = IndexedSnapshot::open(
     &control,
 )?;
 let count = snapshot.captured_value(b"PRIORITY", b"6")?;
-println!("committed {} matching {}", snapshot.entry_count(), count.entry_count);
+println!("committed {} matching {} archived {}", snapshot.entry_count(), count.entry_count, snapshot.is_archived());
 snapshot.visit_match(b"PRIORITY", b"6", &control, |entry| {
     entry.visit_payloads(|payload| {
         if payload.starts_with(b"MESSAGE=") {

@@ -46,6 +46,8 @@ Last updated: 2026-10-06
 
 ## Recently Closed Or Completed
 
+- SOW-0148 - Indexed Snapshot Archive State: completed. Go IsArchived and Rust is_archived expose frozen metadata for approved recovery; real archive-transition tests, focused suites, published examples and bounded independent review pass. Local-only follow-up.
+
 - SOW-0147 - Indexed Snapshots For Domain History: complete. Go/Rust bounded snapshots, strict index verification and failure-preserving writer lifecycle; local commits 501fd32/cd0dfaf, independent review and focused fixes complete. SDK publication and Netdata adoption remain separate.
 
 - SOW-0145 - Rust Close Without Retention And v0.8.2: completed and published.

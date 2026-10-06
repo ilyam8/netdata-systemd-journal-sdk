@@ -481,3 +481,33 @@ func TestIndexedSnapshotRejectsFieldWithoutData(t *testing.T) {
 		t.Fatal("missing FIELD data chain reported as absent")
 	}
 }
+
+func TestIndexedSnapshotArchivedStateIsFrozen(t *testing.T) {
+	for _, mode := range []ReaderAccessMode{ReaderAccessReadAt, ReaderAccessMmap} {
+		t.Run(fmt.Sprint(mode), func(t *testing.T) {
+			path, writer := snapshotFixture(t, false, CompressionNone, 1)
+			opts := IndexedSnapshotOptions{Reader: DefaultReaderOptions().WithAccessMode(mode)}
+			active := openTestSnapshot(t, path, opts)
+			if active.IsArchived() {
+				t.Fatal("active capture reported archived")
+			}
+			if err := writer.ArchiveTo(path); err != nil {
+				t.Fatal(err)
+			}
+			if active.IsArchived() {
+				t.Fatal("archive changed the previously captured state")
+			}
+			archived := openTestSnapshot(t, path, opts)
+			if !archived.IsArchived() {
+				t.Fatal("new capture did not report archived")
+			}
+		})
+	}
+	path, writer := snapshotFixture(t, false, CompressionNone, 1)
+	if err := writer.CloseOffline(); err != nil {
+		t.Fatal(err)
+	}
+	if openTestSnapshot(t, path, IndexedSnapshotOptions{}).IsArchived() {
+		t.Fatal("offline capture reported archived")
+	}
+}

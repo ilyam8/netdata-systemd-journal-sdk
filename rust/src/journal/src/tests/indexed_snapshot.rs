@@ -406,3 +406,49 @@ fn strict_index_rejects_hash_tables_outside_object_tail() {
         );
     }
 }
+
+#[test]
+fn indexed_snapshot_archived_state_is_frozen() {
+    use journal_log_writer::{Config, EntryTimestamps, Log, RetentionPolicy, RotationPolicy};
+    use journal_registry::{Origin, Source};
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config::new(
+        Origin {
+            machine_id: Some(test_uuid(1)),
+            namespace: None,
+            source: Source::System,
+        },
+        RotationPolicy::default(),
+        RetentionPolicy::default(),
+    )
+    .with_boot_id(test_uuid(2));
+    let mut log = Log::new(dir.path(), config).unwrap();
+    log.write_entry_with_timestamps(
+        &[b"MESSAGE=archive-state"],
+        EntryTimestamps::default()
+            .with_entry_realtime_usec(1_000_000)
+            .with_entry_monotonic_usec(1),
+    )
+    .unwrap();
+    let path = log.active_path().unwrap().to_path_buf();
+    let control = SnapshotControl::default();
+    let active = IndexedSnapshot::open(&path, Default::default(), &control).unwrap();
+    assert!(!active.is_archived());
+    log.close().unwrap();
+    assert!(!active.is_archived(), "archive changed captured state");
+    let archived = IndexedSnapshot::open(&path, Default::default(), &control).unwrap();
+    assert!(archived.is_archived());
+}
+
+#[test]
+fn indexed_snapshot_offline_is_not_archived() {
+    let (_dir, path, mut journal, mut writer) = fixture(false, Compression::None);
+    append(&mut journal, &mut writer, 1);
+    // The low-level format API exposes the offline state directly; the
+    // high-level Log lifecycle always closes nonempty journals as archived.
+    journal.journal_header_mut().state = journal_core::file::JournalState::Offline as u8;
+    let snapshot =
+        IndexedSnapshot::open(&path, Default::default(), &SnapshotControl::default()).unwrap();
+    assert!(!snapshot.is_archived());
+}

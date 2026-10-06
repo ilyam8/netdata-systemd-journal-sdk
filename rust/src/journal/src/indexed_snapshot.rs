@@ -1,6 +1,6 @@
 //! Bounded native-index traversal. Capture requires caller-owned writer exclusion.
 use super::*;
-use journal_core::file::{HashTable, JournalHeader};
+use journal_core::file::{HashTable, JournalHeader, JournalState};
 
 /// Cooperative cancellation, checked between objects, chunks, and payloads.
 /// A syscall or one decompression is not interruptible.
@@ -228,6 +228,11 @@ impl IndexedSnapshot {
     }
     pub fn entry_count(&self) -> u64 {
         self.header.n_entries
+    }
+    /// Whether the captured header was archived. This remains fixed if the
+    /// file is archived later; it does not certify index integrity.
+    pub fn is_archived(&self) -> bool {
+        self.header.state == JournalState::Archived as u8
     }
     pub fn captured_value(&self, name: &[u8], value: &[u8]) -> Result<CapturedValue> {
         self.values

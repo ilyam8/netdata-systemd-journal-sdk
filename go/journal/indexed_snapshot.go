@@ -128,6 +128,10 @@ func OpenIndexedSnapshot(ctx context.Context, path string, opts IndexedSnapshotO
 // EntryCount is the frozen number of committed entries.
 func (s *IndexedSnapshot) EntryCount() uint64 { return s.reader.header.nEntries }
 
+// IsArchived reports whether the captured header was archived. The result stays
+// fixed if the file is archived later; it does not certify index integrity.
+func (s *IndexedSnapshot) IsArchived() bool { return s.reader.header.state == stateArchived }
+
 // CapturedValue returns an immutable count, or ErrSnapshotUndeclared.
 func (s *IndexedSnapshot) CapturedValue(name, value []byte) (CapturedValue, error) {
 	if s.closed {
