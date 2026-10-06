@@ -441,6 +441,24 @@ Failure handling:
   a TOML file. Current examples all target 0.9.0. Additional syntax support
   is an optional expansion when consumer examples actually introduce it;
   no current stale-version finding or contract mismatch was demonstrated.
+- Adjudicated six additional post-submission comments. Documented the
+  existing major-version 0/1 guard before dispatch and aligned SOW-0151's
+  plan with the guide's preserve-existing/push-missing tag recovery. These
+  are operator wording corrections with no helper/workflow behavior change.
+  Rejected mandatory Go Origin.Hash: the official Go module proxy protocol
+  requires Version metadata, not Origin, and a normal proxy may omit that
+  field (https://go.dev/ref/mod#goproxy-protocol). Canonical tag targets and
+  Rust archive sources are checked independently, exact Go module/version
+  consumption is checked, and any provided conflicting origin hash fails.
+  The active install-form finding duplicates the disposition above.
+  The 120-minute job limit intentionally bounds one attempt; verified
+  published crates resume without re-upload, so increasing a worst-case
+  theoretical budget is not required by the release contract. No slow live
+  upload was performed in this PR. Retained the eight explicit ordered
+  prepare/auth/publish groups: their crate/step/token references match, fresh
+  authentication follows each dry-run, and a matrix does not guarantee
+  dependency order. Factoring correct groups is optional refactoring, not
+  an unimplemented release requirement.
 
 ## Validation
 

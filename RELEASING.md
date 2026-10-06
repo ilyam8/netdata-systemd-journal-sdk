@@ -66,6 +66,8 @@ once. Tag pushes use each maintainer's existing GitHub access. See GitHub's
    `netdata/systemd-journal-sdk`.
 2. Select **master** as the workflow branch.
 3. Enter the version as **X.Y.Z**, without `v`, and the full merged source hash.
+   The current workflow supports major versions 0 and 1. Major version 2 or
+   later requires a reviewed Go module-path migration first.
 4. Start the workflow. This authorizes publication of that selected release.
 
 The workflow code comes from the dispatch's master commit. The release source
