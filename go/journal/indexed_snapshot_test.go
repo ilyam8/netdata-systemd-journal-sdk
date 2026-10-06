@@ -75,86 +75,96 @@ func TestIndexedSnapshotPopulationAndPayloads(t *testing.T) {
 					name[0] = 'X'
 					value[0] = '2' // declarations must own their bytes
 					appendSnapshotRows(t, w, 117, 128)
-					if s.EntryCount() != 117 {
-						t.Fatalf("count=%d", s.EntryCount())
-					}
-					cv, err := s.CapturedValue([]byte("SCHEMA"), []byte("1"))
-					if err != nil || !cv.Present || cv.EntryCount != 117 {
-						t.Fatalf("count=%+v, %v", cv, err)
-					}
-					cv, err = s.CapturedValue([]byte("ABSENT"), []byte("x"))
-					if err != nil || cv.Present || cv.EntryCount != 0 {
-						t.Fatalf("absence=%+v %v", cv, err)
-					}
-					if _, err := s.CapturedValue([]byte("SCHEMA"), []byte("2")); !errors.Is(err, ErrSnapshotUndeclared) {
-						t.Fatal(err)
-					}
-					var rows []uint64
-					visit := func(e *SnapshotEntry) error {
-						rows = append(rows, e.Seqnum)
-						found := false
-						err := e.VisitPayloads(func(p []byte) error {
-							if bytes.HasPrefix(p, []byte("ROW=")) {
-								found = true
-								want := fmt.Sprintf("ROW=%d", e.Seqnum-1)
-								if string(p) != want {
-									return fmt.Errorf("got %q want %q", p, want)
-								}
-							}
-							return nil
-						})
-						if err == nil && !found {
-							return errors.New("missing ROW")
-						}
-						return err
-					}
-					if err := s.VisitMatch(context.Background(), []byte("BUCKET"), []byte("11"), visit); err != nil {
-						t.Fatal(err)
-					}
-					if !reflect.DeepEqual(rows, []uint64{111, 112, 113, 114, 115, 116, 117}) {
-						t.Fatal(rows)
-					}
-					rows = nil
-					if err := s.VisitMatch(context.Background(), []byte("BUCKET"), []byte("20"), visit); err != nil || len(rows) != 0 {
-						t.Fatalf("new value leaked: %v %v", rows, err)
-					}
-					if err := s.VisitMatch(context.Background(), []byte("RAW\x00\xff"), []byte{0, 255, 4}, visit); err != nil || !reflect.DeepEqual(rows, []uint64{5}) {
-						t.Fatalf("binary=%v %v", rows, err)
-					}
-					rows = nil
-					if err := s.VisitEntries(context.Background(), visit); err != nil {
-						t.Fatal(err)
-					}
-					if len(rows) != 117 {
-						t.Fatal(len(rows))
-					}
-					for i, v := range rows {
-						if v != uint64(i+1) {
-							t.Fatal(rows)
-						}
-					}
-					rows = nil
-					if err := s.VisitField(context.Background(), []byte("BUCKET"), func([]byte) (bool, error) { return true, nil }, visit); err != nil {
-						t.Fatal(err)
-					}
-					want := make([]uint64, 0, 156)
-					for i := 0; i < 117; i++ {
-						want = append(want, uint64(i+1))
-						if i%3 == 0 {
-							want = append(want, uint64(i+1))
-						}
-					}
-					sort.Slice(rows, func(i, j int) bool { return rows[i] < rows[j] })
-					sort.Slice(want, func(i, j int) bool { return want[i] < want[j] })
-					if !reflect.DeepEqual(rows, want) {
-						t.Fatalf("multivalue population=%v want %v", rows, want)
-					}
-					if err := s.VisitField(context.Background(), []byte("ABSENT"), func([]byte) (bool, error) { t.Fatal("absent predicate called"); return true, nil }, visit); err != nil {
-						t.Fatal(err)
-					}
+					checkSnapshotCapturedValues(t, s)
+					checkSnapshotPopulationAndPayloads(t, s)
 				})
 			}
 		}
+	}
+}
+
+func checkSnapshotCapturedValues(t *testing.T, s *IndexedSnapshot) {
+	t.Helper()
+	if s.EntryCount() != 117 {
+		t.Fatalf("count=%d", s.EntryCount())
+	}
+	cv, err := s.CapturedValue([]byte("SCHEMA"), []byte("1"))
+	if err != nil || !cv.Present || cv.EntryCount != 117 {
+		t.Fatalf("count=%+v, %v", cv, err)
+	}
+	cv, err = s.CapturedValue([]byte("ABSENT"), []byte("x"))
+	if err != nil || cv.Present || cv.EntryCount != 0 {
+		t.Fatalf("absence=%+v %v", cv, err)
+	}
+	if _, err := s.CapturedValue([]byte("SCHEMA"), []byte("2")); !errors.Is(err, ErrSnapshotUndeclared) {
+		t.Fatal(err)
+	}
+}
+
+func checkSnapshotPopulationAndPayloads(t *testing.T, s *IndexedSnapshot) {
+	t.Helper()
+	var rows []uint64
+	visit := func(e *SnapshotEntry) error {
+		rows = append(rows, e.Seqnum)
+		found := false
+		err := e.VisitPayloads(func(p []byte) error {
+			if bytes.HasPrefix(p, []byte("ROW=")) {
+				found = true
+				want := fmt.Sprintf("ROW=%d", e.Seqnum-1)
+				if string(p) != want {
+					return fmt.Errorf("got %q want %q", p, want)
+				}
+			}
+			return nil
+		})
+		if err == nil && !found {
+			return errors.New("missing ROW")
+		}
+		return err
+	}
+	if err := s.VisitMatch(context.Background(), []byte("BUCKET"), []byte("11"), visit); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(rows, []uint64{111, 112, 113, 114, 115, 116, 117}) {
+		t.Fatal(rows)
+	}
+	rows = nil
+	if err := s.VisitMatch(context.Background(), []byte("BUCKET"), []byte("20"), visit); err != nil || len(rows) != 0 {
+		t.Fatalf("new value leaked: %v %v", rows, err)
+	}
+	if err := s.VisitMatch(context.Background(), []byte("RAW\x00\xff"), []byte{0, 255, 4}, visit); err != nil || !reflect.DeepEqual(rows, []uint64{5}) {
+		t.Fatalf("binary=%v %v", rows, err)
+	}
+	rows = nil
+	if err := s.VisitEntries(context.Background(), visit); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 117 {
+		t.Fatal(len(rows))
+	}
+	for i, v := range rows {
+		if v != uint64(i+1) {
+			t.Fatal(rows)
+		}
+	}
+	rows = nil
+	if err := s.VisitField(context.Background(), []byte("BUCKET"), func([]byte) (bool, error) { return true, nil }, visit); err != nil {
+		t.Fatal(err)
+	}
+	want := make([]uint64, 0, 156)
+	for i := 0; i < 117; i++ {
+		want = append(want, uint64(i+1))
+		if i%3 == 0 {
+			want = append(want, uint64(i+1))
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i] < rows[j] })
+	sort.Slice(want, func(i, j int) bool { return want[i] < want[j] })
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("multivalue population=%v want %v", rows, want)
+	}
+	if err := s.VisitField(context.Background(), []byte("ABSENT"), func([]byte) (bool, error) { t.Fatal("absent predicate called"); return true, nil }, visit); err != nil {
+		t.Fatal(err)
 	}
 }
 

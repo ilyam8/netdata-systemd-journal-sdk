@@ -157,8 +157,40 @@ func (v *graphVerifier) validateIndex() error {
 		cursors[off] = indexArrayCursor{array: data.entryArrayOffset, total: data.nEntries, last: data.entryOffset}
 	}
 	global := indexArrayCursor{array: v.header.entryArrayOffset, total: v.header.nEntries}
+	if err := v.validateIndexReversePostings(&global, cursors); err != nil {
+		return err
+	}
+	// Header counts, strict ordering, and membership together prove the global
+	// array contains every ENTRY object exactly once.
+	if err := v.indexArrayFinish(global, uint64(v.header.tailEntryArrayOffset), uint64(v.header.tailEntryArrayNEntries), v.header.headerSize >= 264); err != nil {
+		return fmt.Errorf("global index: %w", err)
+	}
+	for off, data := range v.dataObjects {
+		if err := v.strict.ctx.Err(); err != nil {
+			return err
+		}
+		cursor := cursors[off]
+		if cursor.used != data.nEntries {
+			return fmt.Errorf("DATA %d has posting without matching ENTRY data", off)
+		}
+		// DATA's first entry is inline, rather than part of its array.
+		if cursor.total > 0 {
+			cursor.total--
+			cursor.used--
+		}
+		if err := v.indexArrayFinish(cursor, uint64(data.tailEntryArrayOffset), uint64(data.tailEntryArrayNEntries), v.compacted); err != nil {
+			return fmt.Errorf("DATA %d: %w", off, err)
+		}
+	}
+	if len(v.strict.arrays) != len(v.entryArrays) {
+		return fmt.Errorf("unreferenced ENTRY_ARRAY object")
+	}
+	return nil
+}
+
+func (v *graphVerifier) validateIndexReversePostings(global *indexArrayCursor, cursors map[uint64]indexArrayCursor) error {
 	for global.used < global.total {
-		off, err := v.indexArrayNext(&global)
+		off, err := v.indexArrayNext(global)
 		if err != nil {
 			return fmt.Errorf("global index: %w", err)
 		}
@@ -196,31 +228,6 @@ func (v *graphVerifier) validateIndex() error {
 			cursors[dataOffset] = cursor
 		}
 	}
-	// Header counts, strict ordering, and membership together prove the global
-	// array contains every ENTRY object exactly once.
-	if err := v.indexArrayFinish(global, uint64(v.header.tailEntryArrayOffset), uint64(v.header.tailEntryArrayNEntries), v.header.headerSize >= 264); err != nil {
-		return fmt.Errorf("global index: %w", err)
-	}
-	for off, data := range v.dataObjects {
-		if err := v.strict.ctx.Err(); err != nil {
-			return err
-		}
-		cursor := cursors[off]
-		if cursor.used != data.nEntries {
-			return fmt.Errorf("DATA %d has posting without matching ENTRY data", off)
-		}
-		// DATA's first entry is inline, rather than part of its array.
-		if cursor.total > 0 {
-			cursor.total--
-			cursor.used--
-		}
-		if err := v.indexArrayFinish(cursor, uint64(data.tailEntryArrayOffset), uint64(data.tailEntryArrayNEntries), v.compacted); err != nil {
-			return fmt.Errorf("DATA %d: %w", off, err)
-		}
-	}
-	if len(v.strict.arrays) != len(v.entryArrays) {
-		return fmt.Errorf("unreferenced ENTRY_ARRAY object")
-	}
 	return nil
 }
 
@@ -256,52 +263,59 @@ func (v *graphVerifier) validateIndexHashTables() error {
 			if err := v.strict.ctx.Err(); err != nil {
 				return err
 			}
-			current, err := verifySourceU64(v.source, table.offset+bucket*hashItemSize)
-			if err != nil {
+			if err := v.validateIndexHashBucket(table.offset, bucket, buckets, table.fields, seen); err != nil {
 				return err
-			}
-			tail, err := verifySourceU64(v.source, table.offset+bucket*hashItemSize+8)
-			if err != nil {
-				return err
-			}
-			var last uint64
-			for current != 0 {
-				if err := v.strict.ctx.Err(); err != nil {
-					return err
-				}
-				if current <= last {
-					return fmt.Errorf("hash chain is not strictly increasing")
-				}
-				if _, ok := seen[current]; ok {
-					return fmt.Errorf("object belongs to multiple hash chains")
-				}
-				seen[current] = struct{}{}
-				var hash, next uint64
-				if table.fields {
-					field, ok := v.fieldObjects[current]
-					if !ok {
-						return fmt.Errorf("FIELD hash chain references missing FIELD")
-					}
-					hash, next = field.hash, field.nextHashOffset
-				} else {
-					data, ok := v.dataObjects[current]
-					if !ok {
-						return fmt.Errorf("DATA hash chain references missing DATA")
-					}
-					hash, next = data.hash, data.nextHashOffset
-				}
-				if hash%buckets != bucket {
-					return fmt.Errorf("hash bucket mismatch")
-				}
-				last, current = current, next
-			}
-			if last != tail {
-				return fmt.Errorf("hash bucket tail mismatch")
 			}
 		}
 		if len(seen) != expected {
 			return fmt.Errorf("objects missing from native hash table")
 		}
+	}
+	return nil
+}
+
+func (v *graphVerifier) validateIndexHashBucket(offset, bucket, buckets uint64, fields bool, seen map[uint64]struct{}) error {
+	current, err := verifySourceU64(v.source, offset+bucket*hashItemSize)
+	if err != nil {
+		return err
+	}
+	tail, err := verifySourceU64(v.source, offset+bucket*hashItemSize+8)
+	if err != nil {
+		return err
+	}
+	var last uint64
+	for current != 0 {
+		if err := v.strict.ctx.Err(); err != nil {
+			return err
+		}
+		if current <= last {
+			return fmt.Errorf("hash chain is not strictly increasing")
+		}
+		if _, ok := seen[current]; ok {
+			return fmt.Errorf("object belongs to multiple hash chains")
+		}
+		seen[current] = struct{}{}
+		var hash, next uint64
+		if fields {
+			field, ok := v.fieldObjects[current]
+			if !ok {
+				return fmt.Errorf("FIELD hash chain references missing FIELD")
+			}
+			hash, next = field.hash, field.nextHashOffset
+		} else {
+			data, ok := v.dataObjects[current]
+			if !ok {
+				return fmt.Errorf("DATA hash chain references missing DATA")
+			}
+			hash, next = data.hash, data.nextHashOffset
+		}
+		if hash%buckets != bucket {
+			return fmt.Errorf("hash bucket mismatch")
+		}
+		last, current = current, next
+	}
+	if last != tail {
+		return fmt.Errorf("hash bucket tail mismatch")
 	}
 	return nil
 }

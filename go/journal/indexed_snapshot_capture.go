@@ -13,20 +13,8 @@ func (s *IndexedSnapshot) captureBoundary(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if s.maxObject == 0 {
-		s.objectEnd = h.headerSize
-	} else {
-		if err := s.checkOffset(s.maxObject); err != nil {
-			return err
-		}
-		tail, err := readObjectHeaderAt(r.file, s.maxObject)
-		if err != nil {
-			return err
-		}
-		if err := h.validateArenaObject(s.maxObject, tail.size, arenaEnd); err != nil {
-			return err
-		}
-		s.objectEnd = s.maxObject + tail.size
+	if err := s.captureObjectEnd(arenaEnd); err != nil {
+		return err
 	}
 	if h.nEntries == 0 {
 		return h.validateEmptyEntryMetadata()
@@ -57,6 +45,26 @@ func (s *IndexedSnapshot) captureBoundary(ctx context.Context) error {
 	}
 	if h.headerSize >= 264 && (uint64(h.tailEntryArrayOffset) != array || uint64(h.tailEntryArrayNEntries) != used) {
 		return snapshotCorrupt("tail array hint disagrees with committed entry count")
+	}
+	return nil
+}
+
+func (s *IndexedSnapshot) captureObjectEnd(arenaEnd uint64) error {
+	r, h := s.reader, s.reader.header
+	if s.maxObject == 0 {
+		s.objectEnd = h.headerSize
+	} else {
+		if err := s.checkOffset(s.maxObject); err != nil {
+			return err
+		}
+		tail, err := readObjectHeaderAt(r.file, s.maxObject)
+		if err != nil {
+			return err
+		}
+		if err := h.validateArenaObject(s.maxObject, tail.size, arenaEnd); err != nil {
+			return err
+		}
+		s.objectEnd = s.maxObject + tail.size
 	}
 	return nil
 }

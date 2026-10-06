@@ -384,7 +384,6 @@ append alignment and their callers. Earlier coverage of unchanged 4fcb79d
 surfaces remains applicable. No verified blocker remains. Raw reproduction logs
 remain local; the committed tests carry the durable regression coverage.
 
-
 ## Live arena growth correction: October 6
 
 The earlier Linux matrices passed but did not deterministically inspect the
@@ -431,9 +430,73 @@ or cold-cache guarantee. The correction adds no open syscalls or per-entry work.
 Raw reproduction, matrix and timing evidence remains local under
 `.local/human-arena-probe/`.
 
-
 Independent read-only review of `104ac3e` against `f35889c` found no blockers or
 material coverage gaps in this bounded correction. It traced ordinary mapping
 bounds, stable validation and pre-mapping append preflight, and inspected the
 regressions, cross-language harness and recorded logs. The reviewer did not rerun
 tests; the executable results above were produced during implementation.
+
+## Static analysis cleanup: October 6
+
+The user-authorized Codacy pass decomposes existing snapshot and strict-verifier
+operations without changing their contracts. Existing negative and positive tests
+retain their fixture combinations and assertions; no new collection, journal scan
+or payload copy is introduced. Check order, cancellation, future-posting clipping,
+cached scalar refresh and explicit mmap/cursor drops were checked against
+`6e0db20`. The Rust DATA-membership set is released earlier after its coverage
+check because it now belongs to the DATA-validation helper.
+
+Local Lizard 1.24.1 finds no function above CCN 20 or 100 lines in any of the eight
+files containing reported complexity/length findings, including extracted helpers.
+The original functions reproduce the reported failures, with version-dependent
+CCN differences for Rust `visit_array` (local 28, Codacy 26) and strict verification
+(local 66, Codacy 65). The result is local analyzer evidence, not a new remote
+Codacy run.
+
+Bandit 1.9.4 reproduces the three B404/B603 reports before the documented,
+line-scoped annotations and reports none afterward for those selected rules.
+The exact upstream args-os pattern produces two findings on the baseline examples
+and none after the targeted annotations; unrelated rules remain enabled. Markdown
+blank-line findings were removed. CodeQL's two collection-operation false positives
+are explained in the disposition report; no GitHub alerts were dismissed.
+
+The full Go module suite, journal race suite and module vet pass. The Linux Rust
+public SDK suite passes all 167 tests. Focused snapshot and verifier tests pass
+33 and 7 tests respectively. The stock/Go/Rust verifier matrix passes all 63
+results across nine positive and twelve negative fixtures with systemd 257.13.
+The deterministic growth matrix passes all 20 observations across both writers,
+readers and layouts after the harness annotations. Existing live-writer stock
+coverage remains applicable: no ordinary-reader or writer implementation changed.
+
+Raw analyzer output, test logs and before/after metrics remain ignored under
+`.local/static-review/`.
+
+Performance was compared with `6e0db20` using six alternating before/after pairs
+on macOS arm64 (Apple M4 Pro), without OS cache flushing. Go used the existing
+100k-entry snapshot benchmark (10 operations/trial) and repeated-value verifier
+benchmark (30 operations/trial). Rust used release binaries against the same
+30k-entry, 32-field compact fixture for both revisions, timing 1,000 captures,
+100 exact/FIELD visits, 10 full traversals and 3 strict verifications per trial.
+These are different language workloads and do not establish a language ranking.
+
+| Operation | Before median | After median |
+|---|---:|---:|
+| Go capture | 58.47 us | 61.16 us |
+| Go exact selection including capture/payloads | 231.31 us | 236.93 us |
+| Go FIELD selection including capture/payloads | 420.85 us | 419.90 us |
+| Go all 100k payloads including capture | 10.590 ms | 10.507 ms |
+| Go strict verification, 100k repeated entries | 24.572 ms | 24.660 ms |
+| Rust capture | 51.199 us | 51.326 us |
+| Rust exact selection including capture | 846.201 us | 844.033 us |
+| Rust FIELD selection including capture | 841.359 us | 843.947 us |
+| Rust all 30k metadata entries including capture | 3.481 ms | 3.430 ms |
+| Rust strict verification | 466.061 ms | 466.054 ms |
+
+All before/after ranges overlap. Go allocation counts are unchanged; small
+byte-count variation in verifier maps is not a new allocation path. Go capture
+and exact-selection medians vary by +4.6% and +2.4% respectively in these short
+trials; this bounded evidence does not establish a speed improvement or eliminate
+smaller timing differences. The final Go verifier extraction wraps the whole
+reverse-posting traversal, avoiding a new helper call for every ENTRY. Focused
+verifier tests, race checks and vet pass after that refinement. No extra journal
+reads, scans or payload copies were introduced.

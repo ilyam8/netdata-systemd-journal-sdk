@@ -50,6 +50,32 @@ impl GraphVerifier<'_> {
     // Each DATA posting cursor advances once per ENTRY reference. Repeated
     // values cost O(total references), without a second incidence graph.
     pub(super) fn validate_strict_indexes(&self) -> Result<(), String> {
+        self.validate_committed_hash_tables()?;
+        let mut arrays = HashSet::new();
+        let entries = self.strict_array_chain(
+            &mut arrays,
+            self.header.entry_array_offset,
+            self.header.n_entries,
+            "global entry array",
+            if self.header.header_size >= 264 {
+                Some((
+                    u32_at(self.source, 256)? as u64,
+                    u32_at(self.source, 260)? as u64,
+                ))
+            } else {
+                None
+            },
+        )?;
+        let mut cursors = self.strict_data_indexes(&mut arrays)?;
+        self.validate_entry_reverse_links(entries, &mut cursors)?;
+        drop(cursors);
+        if arrays.len() != self.entry_arrays.len() {
+            return Err("orphan ENTRY_ARRAY".into());
+        }
+        self.validate_strict_field_indexes()
+    }
+
+    fn validate_committed_hash_tables(&self) -> Result<(), String> {
         // Parsing each walked table validates its header pointer and extent.
         // A header pointer alone can refer to an unpublished object after tail.
         for (kind, population, offset, size) in [
@@ -72,21 +98,13 @@ impl GraphVerifier<'_> {
                 _ => return Err("missing or duplicate committed hash table object".into()),
             }
         }
-        let mut arrays = HashSet::new();
-        let entries = self.strict_array_chain(
-            &mut arrays,
-            self.header.entry_array_offset,
-            self.header.n_entries,
-            "global entry array",
-            if self.header.header_size >= 264 {
-                Some((
-                    u32_at(self.source, 256)? as u64,
-                    u32_at(self.source, 260)? as u64,
-                ))
-            } else {
-                None
-            },
-        )?;
+        Ok(())
+    }
+
+    fn strict_data_indexes(
+        &self,
+        arrays: &mut HashSet<u64>,
+    ) -> Result<HashMap<u64, PostingCursor>, String> {
         let mut cursors = HashMap::new();
         let mut indexed_data = HashSet::new();
         let buckets = self.header.data_hash_table_size / HASH_ITEM_SIZE;
@@ -107,41 +125,7 @@ impl GraphVerifier<'_> {
                 if data.hash % buckets != bucket {
                     return Err("DATA hash bucket mismatch".into());
                 }
-                if data.n_entries == 0 || data.entry_offset == 0 {
-                    return Err("DATA missing postings".into());
-                }
-                if !self.entry_objects.contains_key(&data.entry_offset) {
-                    return Err("missing inline ENTRY".into());
-                }
-                cursors.insert(
-                    current,
-                    PostingCursor {
-                        remaining: data.n_entries,
-                        array: data.entry_array_offset,
-                        index: 0,
-                        last_entry: 0,
-                    },
-                );
-                let mut last_entry = data.entry_offset;
-                for entry in self.strict_array_chain(
-                    &mut arrays,
-                    data.entry_array_offset,
-                    data.n_entries - 1,
-                    "DATA postings",
-                    if self.compact {
-                        Some((
-                            u32_at_u64(self.source, current + 64)? as u64,
-                            u32_at_u64(self.source, current + 68)? as u64,
-                        ))
-                    } else {
-                        None
-                    },
-                )? {
-                    if entry <= last_entry {
-                        return Err("orphan or duplicate DATA posting".into());
-                    }
-                    last_entry = entry;
-                }
+                self.validate_data_postings(current, data, arrays, &mut cursors)?;
                 previous = current;
                 current = data.next_hash_offset;
             }
@@ -152,6 +136,59 @@ impl GraphVerifier<'_> {
         if indexed_data.len() != self.data_objects.len() {
             return Err("missing DATA index or reverse ENTRY link".into());
         }
+        Ok(cursors)
+    }
+
+    fn validate_data_postings(
+        &self,
+        offset: u64,
+        data: &DataObject,
+        arrays: &mut HashSet<u64>,
+        cursors: &mut HashMap<u64, PostingCursor>,
+    ) -> Result<(), String> {
+        if data.n_entries == 0 || data.entry_offset == 0 {
+            return Err("DATA missing postings".into());
+        }
+        if !self.entry_objects.contains_key(&data.entry_offset) {
+            return Err("missing inline ENTRY".into());
+        }
+        cursors.insert(
+            offset,
+            PostingCursor {
+                remaining: data.n_entries,
+                array: data.entry_array_offset,
+                index: 0,
+                last_entry: 0,
+            },
+        );
+        let mut last_entry = data.entry_offset;
+        for entry in self.strict_array_chain(
+            arrays,
+            data.entry_array_offset,
+            data.n_entries - 1,
+            "DATA postings",
+            if self.compact {
+                Some((
+                    u32_at_u64(self.source, offset + 64)? as u64,
+                    u32_at_u64(self.source, offset + 68)? as u64,
+                ))
+            } else {
+                None
+            },
+        )? {
+            if entry <= last_entry {
+                return Err("orphan or duplicate DATA posting".into());
+            }
+            last_entry = entry;
+        }
+        Ok(())
+    }
+
+    fn validate_entry_reverse_links(
+        &self,
+        entries: Vec<u64>,
+        cursors: &mut HashMap<u64, PostingCursor>,
+    ) -> Result<(), String> {
         let mut last = 0;
         for offset in entries {
             self.source.check()?;
@@ -164,46 +201,56 @@ impl GraphVerifier<'_> {
                 let cursor = cursors
                     .get_mut(data)
                     .ok_or("ENTRY references missing indexed DATA")?;
-                // The trusted-unique writer API can preserve duplicate items,
-                // while the native reverse list contains the entry once.
-                if cursor.last_entry == offset {
-                    continue;
-                }
-                if cursor.remaining == 0 {
-                    return Err("missing DATA reverse link".into());
-                }
-                let expected = if cursor.last_entry == 0 {
-                    self.data_objects[data].entry_offset
-                } else {
-                    let array = self
-                        .entry_arrays
-                        .get(&cursor.array)
-                        .ok_or("missing posting array")?;
-                    let entry = *array
-                        .items
-                        .get(cursor.index)
-                        .ok_or("missing posting slot")?;
-                    cursor.index += 1;
-                    if cursor.index == array.items.len() {
-                        cursor.array = array.next;
-                        cursor.index = 0;
-                    }
-                    entry
-                };
-                if expected != offset {
-                    return Err("DATA/ENTRY reverse link mismatch".into());
-                }
-                cursor.last_entry = offset;
-                cursor.remaining -= 1;
+                self.validate_entry_reverse_link(*data, offset, cursor)?;
             }
         }
         if cursors.values().any(|cursor| cursor.remaining != 0) {
             return Err("orphan DATA posting".into());
         }
-        drop(cursors);
-        if arrays.len() != self.entry_arrays.len() {
-            return Err("orphan ENTRY_ARRAY".into());
+        Ok(())
+    }
+
+    fn validate_entry_reverse_link(
+        &self,
+        data: u64,
+        offset: u64,
+        cursor: &mut PostingCursor,
+    ) -> Result<(), String> {
+        // The trusted-unique writer API can preserve duplicate items,
+        // while the native reverse list contains the entry once.
+        if cursor.last_entry == offset {
+            return Ok(());
         }
+        if cursor.remaining == 0 {
+            return Err("missing DATA reverse link".into());
+        }
+        let expected = if cursor.last_entry == 0 {
+            self.data_objects[&data].entry_offset
+        } else {
+            let array = self
+                .entry_arrays
+                .get(&cursor.array)
+                .ok_or("missing posting array")?;
+            let entry = *array
+                .items
+                .get(cursor.index)
+                .ok_or("missing posting slot")?;
+            cursor.index += 1;
+            if cursor.index == array.items.len() {
+                cursor.array = array.next;
+                cursor.index = 0;
+            }
+            entry
+        };
+        if expected != offset {
+            return Err("DATA/ENTRY reverse link mismatch".into());
+        }
+        cursor.last_entry = offset;
+        cursor.remaining -= 1;
+        Ok(())
+    }
+
+    fn validate_strict_field_indexes(&self) -> Result<(), String> {
         let buckets = self.header.field_hash_table_size / HASH_ITEM_SIZE;
         let mut indexed_fields = HashSet::new();
         let mut field_data = HashSet::new();
@@ -223,26 +270,7 @@ impl GraphVerifier<'_> {
                 if hash % buckets != bucket || !names.insert(name.as_slice()) {
                     return Err("FIELD hash bucket or name mismatch".into());
                 }
-                if *head == 0 {
-                    return Err("FIELD has no DATA chain".into());
-                }
-                let mut data_offset = *head;
-                let mut last_data = u64::MAX;
-                while data_offset != 0 {
-                    self.source.check()?;
-                    if data_offset >= last_data || !field_data.insert(data_offset) {
-                        return Err("invalid FIELD DATA chain".into());
-                    }
-                    if self.data_names.get(&data_offset) != Some(name) {
-                        return Err("FIELD DATA name mismatch".into());
-                    }
-                    let data = self
-                        .data_objects
-                        .get(&data_offset)
-                        .ok_or("missing FIELD DATA")?;
-                    last_data = data_offset;
-                    data_offset = data.next_field_offset;
-                }
+                self.validate_field_data_chain(*head, name, &mut field_data)?;
                 previous = current;
                 current = *next;
             }
@@ -253,6 +281,35 @@ impl GraphVerifier<'_> {
         if indexed_fields.len() != self.fields.len() || field_data.len() != self.data_objects.len()
         {
             return Err("orphan FIELD or missing FIELD DATA link".into());
+        }
+        Ok(())
+    }
+
+    fn validate_field_data_chain(
+        &self,
+        head: u64,
+        name: &[u8],
+        field_data: &mut HashSet<u64>,
+    ) -> Result<(), String> {
+        if head == 0 {
+            return Err("FIELD has no DATA chain".into());
+        }
+        let mut data_offset = head;
+        let mut last_data = u64::MAX;
+        while data_offset != 0 {
+            self.source.check()?;
+            if data_offset >= last_data || !field_data.insert(data_offset) {
+                return Err("invalid FIELD DATA chain".into());
+            }
+            if self.data_names.get(&data_offset).map(Vec::as_slice) != Some(name) {
+                return Err("FIELD DATA name mismatch".into());
+            }
+            let data = self
+                .data_objects
+                .get(&data_offset)
+                .ok_or("missing FIELD DATA")?;
+            last_data = data_offset;
+            data_offset = data.next_field_offset;
         }
         Ok(())
     }

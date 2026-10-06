@@ -41,6 +41,8 @@ fn read(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
+    // These are caller-selected inputs; argv[0] is never used as trusted identity.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let args: Vec<_> = std::env::args_os().collect();
     let operation = args.get(1).ok_or("missing read|write operation")?;
     let path = Path::new(args.get(2).ok_or("missing journal path")?);

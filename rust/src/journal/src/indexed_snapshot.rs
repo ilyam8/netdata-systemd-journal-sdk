@@ -140,27 +140,52 @@ impl IndexedSnapshot {
             values: HashMap::new(),
         };
         control.check()?;
+        snapshot.capture_object_bounds()?;
+        snapshot.capture_entry_bounds(control)?;
+        for field in options.capture_fields {
+            raw_name(&field)?;
+            let head = snapshot.find_field(&field, control)?;
+            snapshot.fields.insert(field, head);
+        }
+        for (name, value) in options.capture_values {
+            raw_name(&name)?;
+            let captured = if let Some(offset) = snapshot.find_data(&name, &value, control, true)? {
+                snapshot.capture_postings(offset, control)?
+            } else {
+                CapturedValue::default()
+            };
+            snapshot.values.insert((name, value), captured);
+        }
+        control.check()?;
+        Ok(snapshot)
+    }
+    fn capture_object_bounds(&mut self) -> Result<()> {
+        let header = &self.header;
         if header.tail_object_offset.is_none() != (header.n_objects == 0) {
             return Err(corrupt("object count and tail disagree"));
         }
-        snapshot.object_end = if let Some(tail) = header.tail_object_offset {
+        self.object_end = if let Some(tail) = header.tail_object_offset {
             if tail.get() < header.header_size || tail.get() % 8 != 0 {
                 return Err(corrupt("invalid object tail"));
             }
-            let object = snapshot.file.object_header_ref(tail)?;
+            let object = self.file.object_header_ref(tail)?;
             tail.get()
                 .checked_add(object.validated_size()?)
                 .ok_or_else(|| corrupt("object end overflow"))?
         } else {
             header.header_size
         };
-        if snapshot.object_end > header.validated_arena_end(snapshot.file.reader_file_size()?)? {
+        if self.object_end > header.validated_arena_end(self.file.reader_file_size()?)? {
             return Err(corrupt("object tail exceeds declared arena"));
         }
+        Ok(())
+    }
+    fn capture_entry_bounds(&mut self, control: &SnapshotControl<'_>) -> Result<()> {
+        let header = &self.header;
         let (tail, last_array, last_count) =
-            snapshot.array_tail(header.entry_array_offset, header.n_entries, control)?;
-        snapshot.entry_tail = number(tail);
-        if header.header_size >= 272 && header.tail_entry_offset != snapshot.entry_tail {
+            self.array_tail(header.entry_array_offset, header.n_entries, control)?;
+        self.entry_tail = number(tail);
+        if header.header_size >= 272 && header.tail_entry_offset != self.entry_tail {
             return Err(corrupt("tail entry hint disagrees with committed count"));
         }
         if header.header_size >= 264
@@ -170,8 +195,8 @@ impl IndexedSnapshot {
             return Err(corrupt("tail array hints disagree with committed count"));
         }
         if let Some(tail) = tail {
-            snapshot.check_object(tail, 3)?;
-            let entry = snapshot.file.entry_ref(tail)?;
+            self.check_object(tail, 3)?;
+            let entry = self.file.entry_ref(tail)?;
             if entry.header.seqnum != header.tail_entry_seqnum
                 || entry.header.realtime != header.tail_entry_realtime
                 || (header.compatible_flags & 2 != 0
@@ -183,43 +208,35 @@ impl IndexedSnapshot {
         } else {
             header.validate_empty_entry_metadata()?;
         }
-        for field in options.capture_fields {
-            raw_name(&field)?;
-            let head = snapshot.find_field(&field, control)?;
-            snapshot.fields.insert(field, head);
+        Ok(())
+    }
+    fn capture_postings(
+        &self,
+        offset: NonZeroU64,
+        control: &SnapshotControl<'_>,
+    ) -> Result<CapturedValue> {
+        let (first, array, count) = self.postings(offset)?;
+        if count == 0 || count > self.header.n_entries {
+            return Err(corrupt(
+                "captured posting count exceeds committed population",
+            ));
         }
-        for (name, value) in options.capture_values {
-            raw_name(&name)?;
-            let captured = if let Some(offset) = snapshot.find_data(&name, &value, control, true)? {
-                let (first, array, count) = snapshot.postings(offset)?;
-                if count == 0 || count > header.n_entries {
-                    return Err(corrupt(
-                        "captured posting count exceeds committed population",
-                    ));
-                }
-                snapshot.check_entry(first.ok_or_else(|| corrupt("missing inline posting"))?)?;
-                let (last, last_array, used) = snapshot.array_tail(array, count - 1, control)?;
-                let data = snapshot.file.data_ref(offset)?;
-                if let Some((hint_offset, hint_count)) = data.tail_entry_array_hint() {
-                    if hint_offset as u64 != number(last_array) || hint_count as u64 != used {
-                        return Err(corrupt("DATA tail array hint disagrees with count"));
-                    }
-                }
-                drop(data);
-                if let Some(last) = last {
-                    snapshot.check_entry(last)?;
-                }
-                CapturedValue {
-                    present: true,
-                    entry_count: count,
-                }
-            } else {
-                CapturedValue::default()
-            };
-            snapshot.values.insert((name, value), captured);
+        self.check_entry(first.ok_or_else(|| corrupt("missing inline posting"))?)?;
+        let (last, last_array, used) = self.array_tail(array, count - 1, control)?;
+        let data = self.file.data_ref(offset)?;
+        if let Some((hint_offset, hint_count)) = data.tail_entry_array_hint() {
+            if hint_offset as u64 != number(last_array) || hint_count as u64 != used {
+                return Err(corrupt("DATA tail array hint disagrees with count"));
+            }
         }
-        control.check()?;
-        Ok(snapshot)
+        drop(data);
+        if let Some(last) = last {
+            self.check_entry(last)?;
+        }
+        Ok(CapturedValue {
+            present: true,
+            entry_count: count,
+        })
     }
     pub fn entry_count(&self) -> u64 {
         self.header.n_entries
@@ -457,6 +474,37 @@ impl IndexedSnapshot {
         NonZeroU64::new(u64::from_le_bytes(bytes))
             .ok_or_else(|| corrupt("missing required posting"))
     }
+    fn posting_array_offset(
+        &self,
+        current: Option<NonZeroU64>,
+        previous_array: u64,
+        clip: bool,
+    ) -> Result<NonZeroU64> {
+        match current {
+            Some(offset) => Ok(offset),
+            None if clip && previous_array != 0 => {
+                self.required_posting(None, previous_array + 16, false)
+            }
+            None => Err(corrupt("missing posting array")),
+        }
+    }
+    fn posting_slot(
+        &self,
+        cached: Option<NonZeroU64>,
+        array: NonZeroU64,
+        index: usize,
+        clip: bool,
+    ) -> Result<NonZeroU64> {
+        match cached {
+            Some(entry) => Ok(entry),
+            None if clip => {
+                let compact = self.header.incompatible_flags & 16 != 0;
+                let width = if compact { 4 } else { 8 };
+                self.required_posting(None, array.get() + 24 + index as u64 * width, compact)
+            }
+            None => Err(corrupt("zero posting")),
+        }
+    }
     fn visit_array(
         &self,
         mut current: Option<NonZeroU64>,
@@ -470,13 +518,7 @@ impl IndexedSnapshot {
         let mut chunk = Vec::with_capacity(256);
         while remaining > 0 {
             control.check()?;
-            let offset = match current {
-                Some(offset) => offset,
-                None if clip && previous_array != 0 => {
-                    self.required_posting(None, previous_array + 16, false)?
-                }
-                None => return Err(corrupt("missing posting array")),
-            };
+            let offset = self.posting_array_offset(current, previous_array, clip)?;
             if clip && offset.get() > number(self.header.tail_object_offset) {
                 return Ok(());
             }
@@ -502,19 +544,7 @@ impl IndexedSnapshot {
                     }
                 }
                 for (index, &cached) in chunk.iter().enumerate() {
-                    let entry = match cached {
-                        Some(entry) => entry,
-                        None if clip => {
-                            let compact = self.header.incompatible_flags & 16 != 0;
-                            let width = if compact { 4 } else { 8 };
-                            self.required_posting(
-                                None,
-                                offset.get() + 24 + (start + index) as u64 * width,
-                                compact,
-                            )?
-                        }
-                        None => return Err(corrupt("zero posting")),
-                    };
+                    let entry = self.posting_slot(cached, offset, start + index, clip)?;
                     if entry.get() <= last {
                         return Err(corrupt("postings do not progress"));
                     }

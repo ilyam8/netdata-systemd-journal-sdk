@@ -120,7 +120,6 @@ func (s *IndexedSnapshot) refreshPostingOffset(off, size uint64) (uint64, error)
 }
 
 func (s *IndexedSnapshot) visitArrays(ctx context.Context, off, count, previous uint64, clip bool, visit func(*SnapshotEntry) error) error {
-	size := s.reader.offsetArrayItemSize()
 	for count > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -133,35 +132,10 @@ func (s *IndexedSnapshot) visitArrays(ctx context.Context, off, count, previous 
 			return err
 		}
 		used := minUint64(count, capacity)
-		for pos := uint64(0); pos < used; {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			chunk := minUint64(used-pos, uint64(len(s.postingBuf))/size)
-			buf := s.postingBuf[:chunk*size]
-			if err := s.reader.readAt(buf, off+offsetArrayObjectHeaderSize+pos*size); err != nil {
-				return err
-			}
-			for i := uint64(0); i < chunk; i++ {
-				entry := entryOffsetArrayItem(buf[i*size:], size)
-				if clip && entry == 0 {
-					entry, err = s.refreshPostingOffset(off+offsetArrayObjectHeaderSize+(pos+i)*size, size)
-					if err != nil {
-						return err
-					}
-				}
-				if clip && entry > s.maxEntry {
-					return nil
-				}
-				if entry <= previous || entry > s.maxEntry {
-					return snapshotCorrupt("invalid entry-array member")
-				}
-				if err := s.visitEntry(ctx, entry, visit); err != nil {
-					return err
-				}
-				previous = entry
-			}
-			pos += chunk
+		var clipped bool
+		previous, clipped, err = s.visitArrayItems(ctx, off, used, previous, clip, visit)
+		if err != nil || clipped {
+			return err
 		}
 		count -= used
 		if clip && count > 0 && a.nextArrayOffset == 0 {
@@ -176,6 +150,43 @@ func (s *IndexedSnapshot) visitArrays(ctx context.Context, off, count, previous 
 		off = a.nextArrayOffset
 	}
 	return ctx.Err()
+}
+
+// visitArrayItems reports clipping separately from exhausting this array.
+func (s *IndexedSnapshot) visitArrayItems(ctx context.Context, off, used, previous uint64, clip bool, visit func(*SnapshotEntry) error) (uint64, bool, error) {
+	size := s.reader.offsetArrayItemSize()
+	for pos := uint64(0); pos < used; {
+		if err := ctx.Err(); err != nil {
+			return previous, false, err
+		}
+		chunk := minUint64(used-pos, uint64(len(s.postingBuf))/size)
+		buf := s.postingBuf[:chunk*size]
+		if err := s.reader.readAt(buf, off+offsetArrayObjectHeaderSize+pos*size); err != nil {
+			return previous, false, err
+		}
+		for i := uint64(0); i < chunk; i++ {
+			entry := entryOffsetArrayItem(buf[i*size:], size)
+			if clip && entry == 0 {
+				var err error
+				entry, err = s.refreshPostingOffset(off+offsetArrayObjectHeaderSize+(pos+i)*size, size)
+				if err != nil {
+					return previous, false, err
+				}
+			}
+			if clip && entry > s.maxEntry {
+				return previous, true, nil
+			}
+			if entry <= previous || entry > s.maxEntry {
+				return previous, false, snapshotCorrupt("invalid entry-array member")
+			}
+			if err := s.visitEntry(ctx, entry, visit); err != nil {
+				return previous, false, err
+			}
+			previous = entry
+		}
+		pos += chunk
+	}
+	return previous, false, nil
 }
 
 func (s *IndexedSnapshot) visitEntry(ctx context.Context, off uint64, visit func(*SnapshotEntry) error) error {

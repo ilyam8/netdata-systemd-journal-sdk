@@ -91,86 +91,97 @@ fn indexed_snapshot_bounds_postings_values_and_payload_lifetimes() {
             for index in 18..=400 {
                 append(&mut journal, &mut writer, index);
             }
-            assert_eq!(snapshot.entry_count(), 17);
-            assert_eq!(
-                snapshot.captured_value(b"SCHEMA", b"1").unwrap(),
-                CapturedValue {
-                    present: true,
-                    entry_count: 17
-                }
-            );
-            assert!(
-                !snapshot
-                    .captured_value(b"SCHEMA", b"absent")
-                    .unwrap()
-                    .present
-            );
-            assert!(snapshot.captured_value(b"SCHEMA", b"undeclared").is_err());
-            let mut seen = Vec::new();
-            snapshot
-                .visit_match(b"SCHEMA", b"1", &control, |entry| {
-                    seen.push(entry.metadata().seqnum);
-                    let mut binary = false;
-                    entry.visit_payloads(|payload| {
-                        binary |= payload == b"\xff=\x00\xfe";
-                        Ok(())
-                    })?;
-                    assert!(binary);
-                    Ok(())
-                })
-                .unwrap();
-            assert_eq!(seen, (1..=17).collect::<Vec<_>>());
-            seen.clear();
-            snapshot
-                .visit_entries(&control, |entry| {
-                    seen.push(entry.metadata().seqnum);
-                    Ok(())
-                })
-                .unwrap();
-            assert_eq!(seen, (1..=17).collect::<Vec<_>>());
-            let mut count = 0;
-            snapshot
-                .visit_field(
-                    b"BUCKET",
-                    &control,
-                    |_| Ok(true),
-                    |_| {
-                        count += 1;
-                        Ok(())
-                    },
-                )
-                .unwrap();
-            assert_eq!(count, 34, "multivalued rows deliberately repeat");
-            snapshot
-                .visit_field(b"ABSENT", &control, |_| panic!(), |_| panic!())
-                .unwrap();
-            assert!(
-                snapshot
-                    .visit_field(b"UNDECLARED", &control, |_| Ok(true), |_| Ok(()))
-                    .is_err()
-            );
-            let cancelled = || true;
-            assert!(matches!(
-                snapshot.visit_entries(
-                    &SnapshotControl {
-                        cancelled: Some(&cancelled)
-                    },
-                    |_| Ok(())
-                ),
-                Err(SdkError::Cancelled)
-            ));
-            let mut count = 0;
-            assert!(
-                snapshot
-                    .visit_match(b"BUCKET", b"a", &control, |_| {
-                        count += 1;
-                        Err(SdkError::Unsupported("callback"))
-                    })
-                    .is_err()
-            );
-            assert_eq!(count, 1);
+            assert_snapshot_bounds_and_payloads(&mut snapshot, &control);
+            assert_snapshot_callback_errors(&mut snapshot, &control);
         }
     }
+}
+
+fn assert_snapshot_bounds_and_payloads(
+    snapshot: &mut IndexedSnapshot,
+    control: &SnapshotControl<'_>,
+) {
+    assert_eq!(snapshot.entry_count(), 17);
+    assert_eq!(
+        snapshot.captured_value(b"SCHEMA", b"1").unwrap(),
+        CapturedValue {
+            present: true,
+            entry_count: 17
+        }
+    );
+    assert!(
+        !snapshot
+            .captured_value(b"SCHEMA", b"absent")
+            .unwrap()
+            .present
+    );
+    assert!(snapshot.captured_value(b"SCHEMA", b"undeclared").is_err());
+    let mut seen = Vec::new();
+    snapshot
+        .visit_match(b"SCHEMA", b"1", control, |entry| {
+            seen.push(entry.metadata().seqnum);
+            let mut binary = false;
+            entry.visit_payloads(|payload| {
+                binary |= payload == b"\xff=\x00\xfe";
+                Ok(())
+            })?;
+            assert!(binary);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(seen, (1..=17).collect::<Vec<_>>());
+    seen.clear();
+    snapshot
+        .visit_entries(control, |entry| {
+            seen.push(entry.metadata().seqnum);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(seen, (1..=17).collect::<Vec<_>>());
+    let mut count = 0;
+    snapshot
+        .visit_field(
+            b"BUCKET",
+            control,
+            |_| Ok(true),
+            |_| {
+                count += 1;
+                Ok(())
+            },
+        )
+        .unwrap();
+    assert_eq!(count, 34, "multivalued rows deliberately repeat");
+    snapshot
+        .visit_field(b"ABSENT", control, |_| panic!(), |_| panic!())
+        .unwrap();
+    assert!(
+        snapshot
+            .visit_field(b"UNDECLARED", control, |_| Ok(true), |_| Ok(()))
+            .is_err()
+    );
+}
+
+fn assert_snapshot_callback_errors(snapshot: &mut IndexedSnapshot, control: &SnapshotControl<'_>) {
+    let cancelled = || true;
+    assert!(matches!(
+        snapshot.visit_entries(
+            &SnapshotControl {
+                cancelled: Some(&cancelled)
+            },
+            |_| Ok(())
+        ),
+        Err(SdkError::Cancelled)
+    ));
+    let mut count = 0;
+    assert!(
+        snapshot
+            .visit_match(b"BUCKET", b"a", control, |_| {
+                count += 1;
+                Err(SdkError::Unsupported("callback"))
+            })
+            .is_err()
+    );
+    assert_eq!(count, 1);
 }
 
 #[test]

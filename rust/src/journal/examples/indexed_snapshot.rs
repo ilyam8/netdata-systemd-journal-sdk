@@ -5,6 +5,8 @@ use journal::{IndexedSnapshot, IndexedSnapshotOptions, SnapshotControl, verify_i
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // These are caller-selected inputs; argv[0] is never used as trusted identity.
+    // nosemgrep: rust.lang.security.args-os.args-os
     let args: Vec<_> = std::env::args_os().collect();
     if args.len() != 4 {
         return Err("expected journal-path field value".into());

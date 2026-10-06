@@ -25,23 +25,8 @@ func (h *journalHeader) validateDeclaredArena(fileSize uint64) (uint64, error) {
 			}
 		}
 	}
-	for _, table := range []struct{ offset, size uint64 }{
-		{h.dataHashTableOffset, h.dataHashTableSize},
-		{h.fieldHashTableOffset, h.fieldHashTableSize},
-	} {
-		if table.offset == 0 && table.size == 0 {
-			continue
-		}
-		if table.offset < objectHeaderSize || table.size < hashItemSize || table.size%hashItemSize != 0 {
-			return 0, fmt.Errorf("%w: invalid hash table extent", errInvalidJournal)
-		}
-		size, ok := checkedAdd(objectHeaderSize, table.size)
-		if !ok {
-			return 0, fmt.Errorf("%w: hash table extent overflows", errInvalidJournal)
-		}
-		if err := h.validateArenaObject(table.offset-objectHeaderSize, size, end); err != nil {
-			return 0, err
-		}
+	if err := h.validateArenaHashTables(end); err != nil {
+		return 0, err
 	}
 	if h.headerSize >= 264 && h.tailEntryArrayOffset != 0 {
 		itemSize := uint64(regularOffsetArrayItemSize)
@@ -59,6 +44,28 @@ func (h *journalHeader) validateDeclaredArena(fileSize uint64) (uint64, error) {
 		}
 	}
 	return end, nil
+}
+
+func (h *journalHeader) validateArenaHashTables(end uint64) error {
+	for _, table := range []struct{ offset, size uint64 }{
+		{h.dataHashTableOffset, h.dataHashTableSize},
+		{h.fieldHashTableOffset, h.fieldHashTableSize},
+	} {
+		if table.offset == 0 && table.size == 0 {
+			continue
+		}
+		if table.offset < objectHeaderSize || table.size < hashItemSize || table.size%hashItemSize != 0 {
+			return fmt.Errorf("%w: invalid hash table extent", errInvalidJournal)
+		}
+		size, ok := checkedAdd(objectHeaderSize, table.size)
+		if !ok {
+			return fmt.Errorf("%w: hash table extent overflows", errInvalidJournal)
+		}
+		if err := h.validateArenaObject(table.offset-objectHeaderSize, size, end); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *journalHeader) validateArenaObject(offset, size, end uint64) error {

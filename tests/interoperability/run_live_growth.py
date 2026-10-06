@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 import queue
 import shlex
-import subprocess
+import subprocess  # nosec B404
 import sys
 import tempfile
 import threading
@@ -23,7 +23,10 @@ from run_live_matrix import REPO_ROOT, build_env
 
 def run(command: list[str], *, cwd: Path, env: dict[str, str]) -> str:
     print(f"+ {shlex.join(command)}", file=sys.stderr, flush=True)
-    result = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, timeout=180)
+    # Only fixed build commands and harness-built executables reach this call.
+    result = subprocess.run(  # nosec B603
+        command, cwd=cwd, env=env, text=True, capture_output=True, timeout=180,
+    )
     if result.returncode:
         print(f"failed in {cwd}, status {result.returncode}: {result.stderr}", file=sys.stderr)
         raise SystemExit(result.returncode)
@@ -56,8 +59,11 @@ def main() -> None:
                 command = [str(binary), "write", str(path)] + (["compact"] if compact else [])
                 print(f"+ {shlex.join(command)}", file=sys.stderr, flush=True)
                 with tempfile.TemporaryFile(mode="w+") as errors:
-                    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                               stderr=errors, text=True, env=env)
+                    # The writer is built above; arguments are passed without a shell.
+                    process = subprocess.Popen(  # nosec B603
+                        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                        stderr=errors, text=True, env=env,
+                    )
                     stages: queue.Queue = queue.Queue()
                     reader = threading.Thread(target=read_stages, args=(process, stages), daemon=True)
                     reader.start()

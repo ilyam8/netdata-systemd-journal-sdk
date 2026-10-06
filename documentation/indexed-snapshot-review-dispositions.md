@@ -92,7 +92,6 @@ is rejected by stock.
 Final test, interoperability and independent-review results are recorded in
 [indexed-snapshot-validation.md](indexed-snapshot-validation.md).
 
-
 ## Third supplied human review: live growth
 
 [H05: live readers during arena growth](https://github.com/netdata/systemd-journal-sdk/pull/5#discussion_r4193955216)
@@ -117,7 +116,41 @@ also pauses before ENTRY publication. SDK unit tests retain readers across real
 mid-append growth, with windowed and whole-file Rust coverage. Final validation
 and open-cost measurements are recorded in indexed-snapshot-validation.md.
 
-
 Independent review of correction `104ac3e` found no blockers: ordinary-reader
 mapping safety and stable capture/recovery invariants remain intact. H05 is
 accepted and fixed; no additional issue or deferred correction was identified.
+
+## Codacy and CodeQL review: October 6
+
+The completed checks at `6e0db20` report 19 Codacy findings and 2 CodeQL alerts.
+All Codacy issues were retrieved in one complete API page (19 of 19), and both
+CodeQL annotations were retrieved from the completed current-head check. This
+review covers those two analyzers, not unrelated PR comments or checks.
+
+| Finding | Count | Disposition |
+|---|---:|---|
+| Go `validateDeclaredArena`, `captureBoundary`, `visitArrays` complexity | 3 | Fixed: separate arena-table validation, object-bound capture and bounded array-item visitation. |
+| Go `validateIndex`, `validateIndexHashTables` complexity | 2 | Fixed: separate global reverse-posting traversal and hash-bucket validation. |
+| Go snapshot population test complexity | 1 | Fixed: separate captured-value and population/payload assertions; retain the complete fixture matrix. |
+| Rust snapshot `open` complexity and length | 2 | Fixed: separate object bounds, entry bounds and captured-posting validation. |
+| Rust `visit_array` complexity | 1 | Fixed: name existing cached/fresh array and slot resolution operations. |
+| Rust strict-index verifier complexity and length | 2 | Fixed: separate committed tables, DATA postings, reverse links and FIELD membership. |
+| Rust snapshot population test length | 1 | Fixed: separate bounds/payload and callback-error assertions, retaining all cases. |
+| Markdown consecutive blank lines | 2 | Fixed in this report and the validation report. |
+| Bandit subprocess import and two calls in the growth harness | 3 | False positives on audited intentional subprocess use; add targeted B404/B603 annotations with reasons, matching existing harness practice. Commands are fixed build commands or harness-built executables, passed as argument vectors without a shell. |
+| Opengrep `args_os` in the two Rust examples | 2 | False positives; add targeted rule annotations explaining that argv[0] is not trusted identity. Caller-selected paths/arguments remain supported. |
+| CodeQL cleartext logging at registry `collection.rs:32` and `:42` | 2 | Reject as false positives; no code change or remote dismissal. These are in-memory collection operations, not log sinks. |
+
+The [upstream args-os rule](https://github.com/semgrep/semgrep-rules/blob/develop/rust/lang/security/args-os.yml)
+blanket-matches `std::env::args_os()` because the executable-name argument must
+not be trusted for security decisions. Neither example makes such a decision.
+The annotations retain non-UTF-8 path support and do not disable unrelated rules.
+
+The [current-head CodeQL check](https://github.com/netdata/systemd-journal-sdk/runs/112230793123)
+labels `self.files.insert(pos, file.clone())` and `self.files.remove(pos)` as
+cleartext logging. `journal_common::collections::VecDeque` aliases the standard
+in-memory collection, and `File` has a derived clone around `Arc<FileInner>`.
+Neither operation logs, serializes or writes a journal. The flagged file is
+unchanged from the PR base. Changing these operations would conceal an analyzer
+modeling error. Both alerts remain open on GitHub; this local pass does not claim
+the remote CodeQL gate is green.
