@@ -8,7 +8,6 @@ Last updated: 2026-10-06
 
 ## Pending
 
-
 - SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
   follow-up analysis for remaining global ENTRY-array and regular/fallback DATA
   array reopens found during SOW-0135 review; no implementation is authorized.
