@@ -9,8 +9,9 @@ import (
 
 func (s *IndexedSnapshot) captureBoundary(ctx context.Context) error {
 	r, h := s.reader, s.reader.header
-	if (s.maxObject == 0) != (h.nObjects == 0) {
-		return snapshotCorrupt("object count and tail disagree")
+	arenaEnd, err := h.validateDeclaredArena(r.fileSize)
+	if err != nil {
+		return err
 	}
 	if s.maxObject == 0 {
 		s.objectEnd = h.headerSize
@@ -22,16 +23,13 @@ func (s *IndexedSnapshot) captureBoundary(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if tail.size < objectHeaderSize || s.maxObject > r.fileSize || tail.size > r.fileSize-s.maxObject {
-			return snapshotCorrupt("invalid last object")
+		if err := h.validateArenaObject(s.maxObject, tail.size, arenaEnd); err != nil {
+			return err
 		}
 		s.objectEnd = s.maxObject + tail.size
 	}
 	if h.nEntries == 0 {
-		if h.entryArrayOffset != 0 || h.tailEntryOffset != 0 || h.tailEntrySeqnum != 0 || h.headEntrySeqnum != 0 || h.headEntryRealtime != 0 || h.tailEntryRealtime != 0 || h.tailEntryMonotonic != 0 || h.tailEntryArrayOffset != 0 || h.tailEntryArrayNEntries != 0 {
-			return snapshotCorrupt("inconsistent empty population")
-		}
-		return nil
+		return h.validateEmptyEntryMetadata()
 	}
 	if h.nEntries > s.objectEnd/entryObjectHeaderSize {
 		return snapshotCorrupt("entry count exceeds file bounds")

@@ -583,3 +583,286 @@ fn strict_index_rejects_missing_or_duplicate_populated_tables() {
         }
     }
 }
+
+fn damage_declared_arena(journal: &mut JournalFile<MmapMut>, damage: &str) {
+    let tail = journal.journal_header_ref().tail_object_offset.unwrap();
+    let tail_size = journal.object_header_ref(tail).unwrap().size;
+    let header = journal.journal_header_mut();
+    header.arena_size = match damage {
+        "zero" => 0,
+        "tail-header" => tail.get() + 8 - header.header_size,
+        "tail-object" => tail.get() + tail_size - 1 - header.header_size,
+        "hash-extent" => {
+            let end = (tail.get() + tail_size + 7) & !7;
+            header.data_hash_table_size =
+                NonZeroU64::new(end - header.data_hash_table_offset.unwrap().get() + 16);
+            end - header.header_size
+        }
+        _ => unreachable!(),
+    };
+}
+
+#[test]
+fn strict_index_rejects_objects_outside_declared_arena() {
+    for compact in [false, true] {
+        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+            let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+            append(&mut journal, &mut writer, 1);
+            damage_declared_arena(&mut journal, damage);
+            let before = std::fs::read(&path).unwrap();
+            assert!(
+                verify_index(&path, &SnapshotControl::default()).is_err(),
+                "compact={compact} damage={damage}"
+            );
+            assert_eq!(before, std::fs::read(&path).unwrap());
+        }
+    }
+}
+
+#[test]
+fn snapshot_rejects_objects_outside_declared_arena() {
+    for compact in [false, true] {
+        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+            let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+            append(&mut journal, &mut writer, 1);
+            damage_declared_arena(&mut journal, damage);
+            let before = std::fs::read(&path).unwrap();
+            assert!(
+                IndexedSnapshot::open(
+                    &path,
+                    IndexedSnapshotOptions::default(),
+                    &SnapshotControl::default()
+                )
+                .is_err(),
+                "compact={compact} damage={damage}"
+            );
+            assert_eq!(before, std::fs::read(&path).unwrap());
+        }
+    }
+}
+
+#[test]
+fn append_open_rejects_objects_outside_declared_arena_without_mutation() {
+    for compact in [false, true] {
+        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+            let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+            append(&mut journal, &mut writer, 1);
+            damage_declared_arena(&mut journal, damage);
+            drop(writer);
+            drop(journal);
+            let before = std::fs::read(&path).unwrap();
+            let result = JournalFile::open_for_append(&RepoFile::from_path(&path).unwrap(), 4096);
+            let rejected = result.is_err();
+            drop(result);
+            assert_eq!(before, std::fs::read(&path).unwrap());
+            assert!(rejected, "compact={compact} damage={damage}");
+        }
+    }
+}
+
+#[test]
+fn writer_construction_rejects_objects_outside_declared_arena_without_mutation() {
+    for compact in [false, true] {
+        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+            let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+            append(&mut journal, &mut writer, 1);
+            drop(writer);
+            damage_declared_arena(&mut journal, damage);
+            let before = std::fs::read(&path).unwrap();
+            assert!(
+                JournalWriter::new(&mut journal, 2, test_uuid(2)).is_err(),
+                "compact={compact} damage={damage}"
+            );
+            assert_eq!(before, std::fs::read(&path).unwrap());
+        }
+    }
+}
+
+#[test]
+fn strict_index_allows_empty_inherited_sequence() {
+    for compact in [false, true] {
+        let (_dir, path, mut journal, _writer) = fixture(compact, Compression::None);
+        journal.journal_header_mut().tail_entry_seqnum = 42;
+        verify_index(&path, &SnapshotControl::default()).unwrap();
+    }
+}
+
+#[test]
+fn empty_inherited_sequence_snapshot_stays_frozen_after_append() {
+    for compact in [false, true] {
+        let (_dir, path, mut journal, writer) = fixture(compact, Compression::None);
+        drop(writer);
+        journal.journal_header_mut().tail_entry_seqnum = 42;
+        let control = SnapshotControl::default();
+        let mut snapshot = IndexedSnapshot::open(
+            &path,
+            IndexedSnapshotOptions {
+                capture_fields: vec![b"SCHEMA".to_vec()],
+                capture_values: vec![(b"SCHEMA".to_vec(), b"1".to_vec())],
+                ..Default::default()
+            },
+            &control,
+        )
+        .unwrap();
+        assert_eq!(snapshot.entry_count(), 0);
+        let mut writer = JournalWriter::new(&mut journal, 43, test_uuid(2)).unwrap();
+        append(&mut journal, &mut writer, 1);
+        assert_eq!(journal.journal_header_ref().tail_entry_seqnum, 43);
+        verify_index(&path, &control).unwrap();
+        snapshot
+            .visit_entries(&control, |_| panic!("empty snapshot grew"))
+            .unwrap();
+        snapshot
+            .visit_match(b"SCHEMA", b"1", &control, |_| panic!("empty snapshot grew"))
+            .unwrap();
+        snapshot
+            .visit_field(
+                b"SCHEMA",
+                &control,
+                |_| Ok(true),
+                |_| panic!("empty snapshot grew"),
+            )
+            .unwrap();
+        assert_eq!(
+            snapshot.captured_value(b"SCHEMA", b"1").unwrap(),
+            CapturedValue::default()
+        );
+    }
+}
+
+#[test]
+fn strict_reuse_guard_preserves_invalid_arena_bytes() {
+    for compact in [false, true] {
+        for damage in ["zero", "tail-header", "tail-object", "hash-extent"] {
+            let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+            append(&mut journal, &mut writer, 1);
+            damage_declared_arena(&mut journal, damage);
+            drop(writer);
+            drop(journal);
+            let before = std::fs::read(&path).unwrap();
+            let reuse = (|| -> crate::Result<()> {
+                verify_index(&path, &SnapshotControl::default())?;
+                let mut file =
+                    JournalFile::open_for_append(&RepoFile::from_path(&path).unwrap(), 4096)?;
+                file.sync()?;
+                Ok(())
+            })();
+            assert!(reuse.is_err());
+            assert_eq!(
+                before,
+                std::fs::read(&path).unwrap(),
+                "compact={compact} damage={damage}"
+            );
+        }
+    }
+}
+
+#[test]
+fn declared_arena_may_exclude_physical_padding() {
+    for compact in [false, true] {
+        let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+        append(&mut journal, &mut writer, 1);
+        let tail = journal.journal_header_ref().tail_object_offset.unwrap();
+        let end = (tail.get() + journal.object_header_ref(tail).unwrap().size + 7) & !7;
+        let header = journal.journal_header_mut();
+        header.arena_size = end - header.header_size;
+        assert!(std::fs::metadata(&path).unwrap().len() > end);
+        let control = SnapshotControl::default();
+        verify_index(&path, &control).unwrap();
+        let mut snapshot =
+            IndexedSnapshot::open(&path, IndexedSnapshotOptions::default(), &control).unwrap();
+        let mut rows = 0;
+        snapshot
+            .visit_entries(&control, |_| {
+                rows += 1;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(rows, 1);
+        drop(writer);
+        drop(journal);
+        let mut reopened =
+            JournalFile::open_for_append(&RepoFile::from_path(&path).unwrap(), 4096).unwrap();
+        let mut writer = JournalWriter::new(&mut reopened, 2, test_uuid(2)).unwrap();
+        append(&mut reopened, &mut writer, 2);
+        verify_index(&path, &control).unwrap();
+    }
+}
+
+#[test]
+fn empty_metadata_respects_historical_field_presence() {
+    for compact in [false, true] {
+        for header_size in [208, 240, 248, 256, 264, 272] {
+            let (_dir, path, mut journal, writer) = fixture(compact, Compression::None);
+            journal.journal_header_mut().tail_entry_seqnum = 42;
+            journal.journal_header_mut().tail_entry_boot_id = *test_uuid(7).as_bytes();
+            drop(writer);
+            drop(journal);
+            let original = std::fs::read(&path).unwrap();
+            let shift = 272 - header_size;
+            let mut bytes = original[..header_size].to_vec();
+            bytes.extend_from_slice(&original[272..]);
+            bytes[88..96].copy_from_slice(&(header_size as u64).to_le_bytes());
+            for location in [104, 120, 136] {
+                let old = u64::from_le_bytes(bytes[location..location + 8].try_into().unwrap());
+                bytes[location..location + 8].copy_from_slice(&(old - shift as u64).to_le_bytes());
+            }
+            std::fs::write(&path, bytes).unwrap();
+            let control = SnapshotControl::default();
+            let strict = verify_index(&path, &control);
+            let snapshot =
+                IndexedSnapshot::open(&path, IndexedSnapshotOptions::default(), &control);
+            if header_size < 272 {
+                strict.unwrap();
+                let mut snapshot = snapshot.unwrap();
+                assert_eq!(snapshot.entry_count(), 0);
+                snapshot
+                    .visit_entries(&control, |_| panic!("historical empty snapshot grew"))
+                    .unwrap();
+            } else {
+                assert!(strict.is_err());
+                assert!(snapshot.is_err());
+            }
+            // Compatibility verification retains its existing empty-metadata tolerance.
+            verify_file(&path).unwrap();
+        }
+    }
+}
+
+#[test]
+fn strict_empty_metadata_rejects_current_file_head_sequence() {
+    for compact in [false, true] {
+        let (_dir, path, mut journal, _writer) = fixture(compact, Compression::None);
+        journal.journal_header_mut().tail_entry_seqnum = 42;
+        journal.journal_header_mut().head_entry_seqnum = 1;
+        let control = SnapshotControl::default();
+        assert!(verify_index(&path, &control).is_err());
+        assert!(IndexedSnapshot::open(&path, IndexedSnapshotOptions::default(), &control).is_err());
+        verify_file(&path).unwrap();
+    }
+}
+
+#[test]
+fn compact_final_object_padding_may_lie_outside_declared_arena() {
+    let (_dir, path, mut journal, mut writer) = fixture(true, Compression::None);
+    for index in 1..=3 {
+        append(&mut journal, &mut writer, index);
+    }
+    let tail = journal.journal_header_ref().tail_object_offset.unwrap();
+    let size = journal.object_header_ref(tail).unwrap().size;
+    assert_ne!(size % 8, 0, "fixture needs unaligned compact ENTRY size");
+    let header = journal.journal_header_mut();
+    header.arena_size = tail.get() + size - header.header_size;
+    let control = SnapshotControl::default();
+    verify_index(&path, &control).unwrap();
+    let mut snapshot =
+        IndexedSnapshot::open(&path, IndexedSnapshotOptions::default(), &control).unwrap();
+    let mut rows = 0;
+    snapshot
+        .visit_entries(&control, |_| {
+            rows += 1;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(rows, 3);
+}

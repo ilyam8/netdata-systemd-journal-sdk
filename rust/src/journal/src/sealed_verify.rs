@@ -947,7 +947,7 @@ pub fn verify_index(path: impl AsRef<Path>, control: &SnapshotControl<'_>) -> Re
             source: JournalFileVerifySource::new(file)?,
             control,
         };
-        let result = verify_graph::verify_index_source(&source);
+        let result = verify_graph::verify_index_source(&source, file.journal_header_ref());
         control.check()?;
         result.map_err(SdkError::VerificationError)
     })

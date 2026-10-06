@@ -139,6 +139,11 @@ For uncertain files, call Go `VerifyIndex(ctx, path)` or Rust
 a writer or directory `Log`. Strict verification requires complete bidirectional
 ENTRY/DATA membership, FIELD/hash coverage, consistent arrays and payload hashes.
 It rejects incomplete publication, including a missing final reverse link.
+Committed objects must fit within the header's declared arena, even when the
+physical file contains extra preallocated bytes. An empty rotated file may
+inherit a tail sequence counter, but must not claim current-file entry offsets,
+head sequence or timestamps. Tail boot metadata follows the header version and
+its compatibility flag.
 It does not authenticate sealed TAGs; use the existing keyed verifier for that.
 `VerifyFile`/`verify_file` retain their compatibility-oriented tolerance and do
 not establish this stronger recovery guarantee.
@@ -149,6 +154,8 @@ re-verifying known finalized archives only with a documented provenance policy:
 fixed writer lifecycle, successful archive file sync, distinct active/archive
 names, and no external mutation. A schema marker alone is not proof of index
 integrity. Always verify an uncertain active file, regardless of its header state.
+Append-open performs bounded header and tail checks before mutation; those checks
+do not replace strict verification of an uncertain file's complete graph.
 
 After an uncertain mutating failure, writers reject further mutation and close
 only resources, without publishing clean metadata or deleting an empty-looking

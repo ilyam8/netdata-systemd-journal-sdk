@@ -618,12 +618,17 @@ impl<M: MemoryMap> JournalFile<M> {
         // Create a memory map for the header
         let header_size = std::mem::size_of::<JournalHeader>() as u64;
         let header_map = M::create(&fd, 0, header_size)?;
-        let header = JournalHeader::ref_from_prefix(&header_map).unwrap().0;
+        // Read mutable header fields before measuring the backing file. A later
+        // append may grow both, but cannot invalidate this captured extent.
+        let header = *JournalHeader::ref_from_prefix(&header_map).unwrap().0;
+        let file_size = fd.metadata()?.len();
         if header.signature != *b"LPKSHHRH" {
             return Err(JournalError::InvalidMagicNumber);
         }
         let sanitized_header =
-            (header.header_size < header_size).then(|| sanitize_header_for_size(*header));
+            (header.header_size < header_size).then(|| sanitize_header_for_size(header));
+
+        header.validated_arena_end(file_size)?;
 
         // Initialize the hash table maps if they exist
         let data_hash_table_map = map_hash_table(
@@ -642,7 +647,7 @@ impl<M: MemoryMap> JournalFile<M> {
         // Create window manager for the rest of the objects
         let window_manager = GuardedCell::new(window_manager_builder(fd)?);
 
-        Ok(JournalFile {
+        let journal = JournalFile {
             file,
             header_map,
             sanitized_header,
@@ -650,7 +655,29 @@ impl<M: MemoryMap> JournalFile<M> {
             field_hash_table_map,
             window_manager,
             seal_options: None,
-        })
+        };
+        Ok(journal)
+    }
+
+    /// Bounded layout check; this does not certify the complete object graph.
+    #[doc(hidden)]
+    pub fn validate_committed_arena(&self) -> Result<()> {
+        self.validate_committed_arena_header(self.journal_header_ref(), self.reader_file_size()?)
+    }
+
+    pub(super) fn validate_committed_arena_header(
+        &self,
+        header: &JournalHeader,
+        file_size: u64,
+    ) -> Result<()> {
+        let end = header.validated_arena_end(file_size)?;
+        if let Some(tail) = header.tail_object_offset {
+            let size = self.object_header_ref(tail)?.validated_size()?;
+            if size > end - tail.get() {
+                return Err(JournalError::ObjectExceedsFileBounds);
+            }
+        }
+        Ok(())
     }
 
     pub fn file(&self) -> &crate::repository::File {

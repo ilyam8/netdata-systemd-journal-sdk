@@ -213,7 +213,13 @@ impl Header {
     }
 }
 
-pub(super) fn verify_index_source(source: &dyn VerifyByteSource) -> Result<(), String> {
+pub(super) fn verify_index_source(
+    source: &dyn VerifyByteSource,
+    header: &journal_core::file::JournalHeader,
+) -> Result<(), String> {
+    header
+        .validate_empty_entry_metadata()
+        .map_err(|err| err.to_string())?;
     let mut verifier = GraphVerifier::new(source);
     verifier.strict = true;
     verifier.verify()

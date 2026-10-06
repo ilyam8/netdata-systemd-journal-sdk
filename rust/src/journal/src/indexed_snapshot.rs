@@ -154,8 +154,8 @@ impl IndexedSnapshot {
         } else {
             header.header_size
         };
-        if snapshot.object_end > snapshot.file.reader_file_size()? {
-            return Err(corrupt("object tail exceeds file"));
+        if snapshot.object_end > header.validated_arena_end(snapshot.file.reader_file_size()?)? {
+            return Err(corrupt("object tail exceeds declared arena"));
         }
         let (tail, last_array, last_count) =
             snapshot.array_tail(header.entry_array_offset, header.n_entries, control)?;
@@ -180,14 +180,8 @@ impl IndexedSnapshot {
             {
                 return Err(corrupt("tail metadata disagrees with committed entry"));
             }
-        } else if header.tail_entry_seqnum != 0
-            || header.head_entry_seqnum != 0
-            || header.head_entry_realtime != 0
-            || header.tail_entry_realtime != 0
-            || header.tail_entry_monotonic != 0
-            || (header.compatible_flags & 2 != 0 && header.tail_entry_boot_id != [0; 16])
-        {
-            return Err(corrupt("nonempty metadata for empty snapshot"));
+        } else {
+            header.validate_empty_entry_metadata()?;
         }
         for field in options.capture_fields {
             raw_name(&field)?;

@@ -111,6 +111,69 @@ pub struct JournalHeader {
 }
 
 impl JournalHeader {
+    /// Validates declared extents before mapping variable-sized native indexes.
+    #[doc(hidden)]
+    pub fn validated_arena_end(&self, file_size: u64) -> Result<u64> {
+        let end = self
+            .header_size
+            .checked_add(self.arena_size)
+            .ok_or(JournalError::ObjectExceedsFileBounds)?;
+        if self.header_size < 208 || self.header_size % 8 != 0 || end > file_size {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        let tail = self.tail_object_offset.map_or(0, NonZeroU64::get);
+        if tail != 0 && (tail < self.header_size || tail % 8 != 0 || tail > end || end - tail < 16)
+        {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        for (offset, size) in [
+            (self.data_hash_table_offset, self.data_hash_table_size),
+            (self.field_hash_table_offset, self.field_hash_table_size),
+        ] {
+            match (offset, size) {
+                (None, None) => {}
+                (Some(offset), Some(size)) => {
+                    let offset = offset.get();
+                    let size = size.get();
+                    if offset < self.header_size + 16
+                        || offset % 8 != 0
+                        || size < 16
+                        || size % 16 != 0
+                        || offset > end
+                        || size > end - offset
+                        || offset - 16 > tail
+                    {
+                        return Err(JournalError::ObjectExceedsFileBounds);
+                    }
+                }
+                _ => return Err(JournalError::InvalidObjectLocation),
+            }
+        }
+        Ok(end)
+    }
+
+    /// Empty files may inherit a sequence counter, but not per-file ENTRY state.
+    #[doc(hidden)]
+    pub fn validate_empty_entry_metadata(&self) -> Result<()> {
+        if self.n_entries != 0 {
+            return Ok(());
+        }
+        if self.head_entry_seqnum != 0
+            || self.entry_array_offset.is_some()
+            || self.head_entry_realtime != 0
+            || self.tail_entry_realtime != 0
+            || self.tail_entry_monotonic != 0
+            || (self.header_size >= 264
+                && (self.tail_entry_array_offset != 0 || self.tail_entry_array_n_entries != 0))
+            || (self.header_size >= 272 && self.tail_entry_offset != 0)
+            || (self.header_size >= 272
+                && self.has_compatible_flag(HeaderCompatibleFlags::TailEntryBootId)
+                && self.tail_entry_boot_id != [0; 16])
+        {
+            return Err(JournalError::InvalidObjectLocation);
+        }
+        Ok(())
+    }
     pub fn has_incompatible_flag(&self, flag: HeaderIncompatibleFlags) -> bool {
         (self.incompatible_flags & flag as u32) != 0
     }

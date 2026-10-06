@@ -1103,6 +1103,14 @@ Historical/layout/compression support is shared with existing readers.
 Strict VerifyIndex/verify_index MUST certify full bidirectional native index
 membership before uncertain files are reused; the compatibility verifier remains
 separate. This offline check has graph-sized time and memory, not query-open cost.
+Strict verification MUST bound every committed object by the declared arena,
+not just physical preallocation. Snapshot capture and append-open MUST reject
+declared extents that exclude their required objects before variable index
+mapping or writer mutation. Empty populations MAY inherit tail sequence state;
+current-file entry pointers, head sequence and timestamps MUST be empty. Tail
+boot metadata MUST follow historical header field presence and compatible flags.
+These shared header checks MUST NOT turn compatibility readers into full graph
+certifiers or reject the historical damaged-tail fixtures they already support.
 Errors after the first possible file or publication-state mutation MUST poison
 writers. Cleanup MUST preserve uncertain files without
 clean-state publication, archival retries, empty-file deletion or retention.

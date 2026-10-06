@@ -1,0 +1,90 @@
+package journal
+
+import "fmt"
+
+// validateDeclaredArena bounds header-addressed objects by the declared arena,
+// not physical preallocation. It reads no objects and is safe before append-open.
+func (h *journalHeader) validateDeclaredArena(fileSize uint64) (uint64, error) {
+	if h.headerSize < headerMinSize || h.headerSize%objectAlignment != 0 || h.headerSize > fileSize {
+		return 0, fmt.Errorf("%w: invalid header extent", errInvalidJournal)
+	}
+	if h.arenaSize > fileSize-h.headerSize {
+		return 0, fmt.Errorf("%w: declared arena exceeds file", errInvalidJournal)
+	}
+	end := h.headerSize + h.arenaSize
+	if (h.tailObjectOffset == 0) != (h.nObjects == 0) {
+		return 0, fmt.Errorf("%w: object count and tail disagree", errInvalidJournal)
+	}
+	for _, object := range []struct{ offset, size uint64 }{
+		{h.tailObjectOffset, objectHeaderSize},
+		{h.entryArrayOffset, offsetArrayObjectHeaderSize},
+	} {
+		if object.offset != 0 {
+			if err := h.validateArenaObject(object.offset, object.size, end); err != nil {
+				return 0, err
+			}
+		}
+	}
+	for _, table := range []struct{ offset, size uint64 }{
+		{h.dataHashTableOffset, h.dataHashTableSize},
+		{h.fieldHashTableOffset, h.fieldHashTableSize},
+	} {
+		if table.offset == 0 && table.size == 0 {
+			continue
+		}
+		if table.offset < objectHeaderSize || table.size < hashItemSize || table.size%hashItemSize != 0 {
+			return 0, fmt.Errorf("%w: invalid hash table extent", errInvalidJournal)
+		}
+		size, ok := checkedAdd(objectHeaderSize, table.size)
+		if !ok {
+			return 0, fmt.Errorf("%w: hash table extent overflows", errInvalidJournal)
+		}
+		if err := h.validateArenaObject(table.offset-objectHeaderSize, size, end); err != nil {
+			return 0, err
+		}
+	}
+	if h.headerSize >= 264 && h.tailEntryArrayOffset != 0 {
+		itemSize := uint64(regularOffsetArrayItemSize)
+		if h.isCompact() {
+			itemSize = compactOffsetArrayItemSize
+		}
+		size := offsetArrayObjectHeaderSize + uint64(h.tailEntryArrayNEntries)*itemSize
+		if err := h.validateArenaObject(uint64(h.tailEntryArrayOffset), size, end); err != nil {
+			return 0, err
+		}
+	}
+	if h.headerSize >= 272 && h.tailEntryOffset != 0 {
+		if err := h.validateArenaObject(h.tailEntryOffset, entryObjectHeaderSize, end); err != nil {
+			return 0, err
+		}
+	}
+	return end, nil
+}
+
+func (h *journalHeader) validateArenaObject(offset, size, end uint64) error {
+	if offset < h.headerSize || offset%objectAlignment != 0 || offset > h.tailObjectOffset {
+		return fmt.Errorf("%w: object offset outside declared arena", errInvalidJournal)
+	}
+	if size < objectHeaderSize || offset > end || size > end-offset {
+		return fmt.Errorf("%w: object exceeds declared arena", errInvalidJournal)
+	}
+	return nil
+}
+
+// An empty rotated file may inherit tailEntrySeqnum. All metadata describing
+// entries in this file must be empty; absent historical fields are not active.
+func (h *journalHeader) validateEmptyEntryMetadata() error {
+	if h.nEntries != 0 {
+		return nil
+	}
+	if h.headEntrySeqnum != 0 || h.headEntryRealtime != 0 || h.tailEntryRealtime != 0 || h.tailEntryMonotonic != 0 || h.entryArrayOffset != 0 {
+		return fmt.Errorf("%w: entry metadata present for empty population", errInvalidJournal)
+	}
+	if h.headerSize >= 264 && (h.tailEntryArrayOffset != 0 || h.tailEntryArrayNEntries != 0) {
+		return fmt.Errorf("%w: entry array tail present for empty population", errInvalidJournal)
+	}
+	if h.headerSize >= 272 && (h.tailEntryOffset != 0 || (h.compatibleFlags&compatibleTailEntryBootID != 0 && !isZeroUUID(h.tailEntryBootID))) {
+		return fmt.Errorf("%w: entry tail present for empty population", errInvalidJournal)
+	}
+	return nil
+}

@@ -374,6 +374,9 @@ impl JournalWriter {
             return Err(JournalError::UnsupportedJournalFile);
         }
 
+        journal_file.validate_committed_arena()?;
+        header.validate_empty_entry_metadata()?;
+
         let append_offset = {
             let header = journal_file.journal_header_ref();
 

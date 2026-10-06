@@ -80,18 +80,7 @@ impl<'a> GraphVerifier<'a> {
         if self.header.n_entries != 0 {
             return Err("entries recorded but no ENTRY objects found".to_string());
         }
-        if self.strict
-            && (self.header.head_entry_seqnum != 0
-                || self.header.tail_entry_seqnum != 0
-                || self.header.head_entry_realtime != 0
-                || self.header.tail_entry_realtime != 0
-                || self.header.tail_entry_monotonic != 0
-                || self.header.tail_entry_offset != 0
-                || (self.header.compatible_flags & COMPATIBLE_TAIL_ENTRY_BOOT_ID != 0
-                    && self.header.tail_entry_boot_id != [0; 16]))
-        {
-            return Err("entry metadata present for empty graph".into());
-        }
+        // Strict empty metadata uses the shared native-header check at entry.
         Ok(())
     }
 

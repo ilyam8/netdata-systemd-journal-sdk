@@ -161,8 +161,10 @@ The fixes enforce shared invariants, rather than special-case reported errors:
 validate captured bounds before variable-length reads; refresh required cached
 zero posting scalars after observing a newer count; poison writers only after
 possible storage or publication-state mutation; and verify unique DATA×ENTRY
-membership and active empty-file metadata consistently. Go and Rust retain
-native index traversal and valid clipping of postings appended after capture.
+membership. This round checked active empty-file metadata only in Rust; the
+second review below closes the missing Go checks and permits inherited sequence
+state in both languages. Native traversal and valid clipping of postings appended
+after capture remain intact.
 
 Correctness evidence on the corrected source:
 
@@ -277,3 +279,69 @@ between two independently loaded boot IDs: macOS denied kern.bootsessionuuid,
 so both helper loads used distinct random fallback IDs. The same assertion
 fails on ac38ddb; the RUM suite passes when that explicit identity-helper read
 is permitted. No consumer source was changed by this SDK review.
+
+## Second review: declared arena and empty population
+
+The branch was rebased onto local master 5cb48c8. The only conflict was the SOW
+status document; both the published Rust receipt and snapshot work were retained.
+The Go/Rust source trees were unchanged by the rebase. The tracked
+[disposition report](indexed-snapshot-review-dispositions.md) records all supplied
+findings, including the four human comments fetched with curl from GitHub's
+review-comment API. The previous empty-metadata claim was incomplete: Rust had
+the boot-ID check, while Go still lacked the empty-population checks.
+
+New Go and Rust regressions failed on the pre-correction source for invalid
+declared arenas and inherited empty-file tail sequence counters. The correction
+puts declared extent and empty-population rules in shared header validators.
+Strict walks bound every object by the declared arena; append-open checks bounds
+before mutation, without a full graph walk. Valid inherited sequence state and
+historical boot-field semantics are preserved. Generic Rust readers retain their
+existing tolerance for damaged historical tail objects; strict verification,
+snapshots and writer reuse enforce complete tail-object bounds.
+
+Both public SDKs agree on the same 26 regular/compact byte fixtures: eight valid
+controls and 18 corrupt cases. Strict verification and snapshot capture agree;
+valid snapshots traverse their exact captured counts. Stock journalctl 257.13
+accepts all eight controls and rejects 14 corrupt cases. It also accepts isolated
+empty head sequences and arenas ending inside the final payload (four cases);
+those are unsafe for SDK reuse and intentionally fail strict verification. The
+exact combined head-sequence/time corruption from the human review fails stock
+verification in both layouts. Committed tests additionally exercise rejected
+reuse without byte changes, real appends after inherited sequence 42, frozen
+empty snapshots and historical field presence. A compact 68-byte final ENTRY
+proves that required physical alignment padding may lie outside the declared
+arena, while its complete payload must lie inside it.
+
+Fresh Linux arm64 validation uses the same synthetic-only Debian container with
+stock systemd 257.13. The live feature matrix passes 18/18: Go/Rust writers;
+regular, compact, all supported compression combinations and sealing; 100 entries
+per writer at 10 ms intervals; two polling readers each for stock/Go/Rust and one
+libsystemd reader. Final ordered reads, structure and keyed verification pass.
+The closed-file positive/corrupt verification matrix passes 63/63. Rust public,
+core and directory-writer library suites pass 161/83/9. The final public rerun
+includes the unaligned-tail regression. These are bounded integration runs, not
+long-duration stress or a v260.1 runtime claim.
+
+Go's additional reopen regression reproduced a valid compact final ENTRY losing
+its physical alignment padding on open/close, plus regular-file preallocation
+shrinking. Append-open now validates the original declared extent first, then
+adopts existing physical preallocation as the writable arena. Mapping, later
+growth and live publication therefore share one nonshrinking allocation bound.
+The regression checks open/close and a later append, preserving physical size
+and passing strict verification in both layouts.
+Final Go module tests and module vet pass; focused journal race tests covering
+header invariants, snapshots, strict verification and writer reuse pass (12.8 s).
+Production cross-builds pass for linux/386 and windows/amd64; these are build
+results, not runtime tests of those platforms.
+
+All 33 marked Go/Rust wiki examples pass, and the 16-page wiki structure check
+passes. No example or dependency version was changed. Earlier platform and
+consumer results above remain prior evidence, not new runs in this round.
+
+Six alternating before/after capture trials against pre-correction 0ae1ac4 show
+Go median 31.19 to 31.28 microseconds (100k-row benchmark, unchanged 12,344 bytes
+and 41 allocations per open). Rust median 46.76 to 47.22 microseconds uses 5,000
+default captures per trial of the same 30k-row synthetic file. Both ranges
+overlap; these small differences do not demonstrate a regression. The workloads
+differ, so the numbers are not a language comparison. No new per-entry decode,
+scan or allocation was introduced; the earlier traversal profiles remain valid.

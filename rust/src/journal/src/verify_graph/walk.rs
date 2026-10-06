@@ -97,6 +97,10 @@ impl<'a> GraphVerifier<'a> {
         if aligned_size == 0 || aligned_size > self.source.len() - offset {
             return Err(format!("object at offset {offset} exceeds file bounds"));
         }
+        let arena_end = self.header.header_size + self.header.arena_size;
+        if self.strict && (offset > arena_end || obj.size > arena_end - offset) {
+            return Err(format!("object at offset {offset} exceeds declared arena"));
+        }
         if offset % 8 != 0 {
             return Err(format!("object offset {offset} is not aligned"));
         }

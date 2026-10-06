@@ -260,15 +260,33 @@ func newAppendWriter(path string, f *os.File, opts Options) (*Writer, error) {
 		return nil, err
 	}
 
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	fileSize := uint64(stat.Size())
+	arenaEnd, err := header.validateDeclaredArena(fileSize)
+	if err != nil {
+		return nil, err
+	}
+	if err := header.validateEmptyEntryMetadata(); err != nil {
+		return nil, err
+	}
 	tail, err := readObjectHeaderAt(f, header.tailObjectOffset)
 	if err != nil {
 		return nil, err
 	}
-	fileSize, err := appendArenaFileSize(header)
-	if err != nil {
+	// Mapping resizes the file, so prove the complete tail fits before mapping.
+	if err := header.validateArenaObject(header.tailObjectOffset, tail.size, arenaEnd); err != nil {
 		return nil, err
 	}
+	if header.isCompact() && fileSize > journalCompactSizeMax {
+		return nil, fmt.Errorf("%w: compact journal cannot exceed 4 GiB", errInvalidJournal)
+	}
 
+	// Retain physical preallocation in the writable arena so mapping and later
+	// publication cannot truncate padding beyond the original declared arena.
+	header.arenaSize = fileSize - header.headerSize
 	header.state = stateOnline
 	w := &Writer{
 		file:                    f,
@@ -295,14 +313,6 @@ func newAppendWriter(path string, f *os.File, opts Options) (*Writer, error) {
 		return nil, err
 	}
 	return w, nil
-}
-
-func appendArenaFileSize(header journalHeader) (uint64, error) {
-	fileSize, ok := checkedAdd(header.headerSize, header.arenaSize)
-	if !ok {
-		return 0, errInvalidJournal
-	}
-	return fileSize, nil
 }
 
 func (w *Writer) applyAppendBootID(opts Options) error {

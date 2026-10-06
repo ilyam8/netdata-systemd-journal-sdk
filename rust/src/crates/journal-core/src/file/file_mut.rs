@@ -41,7 +41,8 @@ impl JournalFile<super::mmap::MmapMut> {
 
         let header_size = std::mem::size_of::<JournalHeader>() as u64;
         let header_map = super::mmap::MmapMut::create(&fd, 0, header_size)?;
-        let header = JournalHeader::ref_from_prefix(&header_map).unwrap().0;
+        let header = *JournalHeader::ref_from_prefix(&header_map).unwrap().0;
+        let file_size = fd.metadata()?.len();
         if header.signature != *b"LPKSHHRH" {
             return Err(JournalError::InvalidMagicNumber);
         }
@@ -51,6 +52,9 @@ impl JournalFile<super::mmap::MmapMut> {
         if !header.has_incompatible_flag(HeaderIncompatibleFlags::KeyedHash) {
             return Err(JournalError::UnsupportedJournalFile);
         }
+
+        header.validated_arena_end(file_size)?;
+        header.validate_empty_entry_metadata()?;
 
         let data_hash_table_map = map_hash_table(
             &fd,
@@ -68,7 +72,7 @@ impl JournalFile<super::mmap::MmapMut> {
         let window_manager =
             GuardedCell::new(WindowManager::new_writer_owned(fd, window_size, 32)?);
 
-        Ok(JournalFile {
+        let journal = JournalFile {
             file: file.clone(),
             header_map,
             sanitized_header: None,
@@ -76,7 +80,9 @@ impl JournalFile<super::mmap::MmapMut> {
             field_hash_table_map,
             window_manager,
             seal_options: None,
-        })
+        };
+        journal.validate_committed_arena_header(&header, file_size)?;
+        Ok(journal)
     }
 }
 

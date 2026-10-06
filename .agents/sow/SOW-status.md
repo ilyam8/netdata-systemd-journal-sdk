@@ -4,7 +4,7 @@ Last updated: 2026-10-06
 
 ## Current
 
-- None.
+- SOW-0147 - Indexed Snapshots For Domain History: in-progress, second review corrections after local-master rebase. Declared arena bounds, rotated-empty metadata and tracked dispositions are under validation.
 
 ## Pending
 
@@ -45,8 +45,6 @@ Last updated: 2026-10-06
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
-
-- SOW-0147 - Indexed Snapshots For Domain History: completed. Saved-comment corrections in dbfc60a enforce snapshot bounds/cache coherence, writer mutation boundaries and graph parity. Go/Rust suites, 18 live cases, 63 verifier checks, 33 examples, current performance evidence and independent reviews pass; local only.
 
 - SOW-0149 - Snapshot Payload Header Cost: completed. Commit 0d365e2 removes unnecessary Go DATA parsing in payload traversal; SDK broad fixture improves 23 percent and current DEM broad queries improve 18-20 percent. Contract tests, race checks, controlled benchmarks and independent review pass.
 

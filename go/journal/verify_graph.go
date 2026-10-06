@@ -58,6 +58,7 @@ type graphWalkState struct {
 type graphVerifier struct {
 	source              verifyByteSource
 	header              journalHeader
+	arenaEnd            uint64
 	compacted           bool
 	spans               map[uint64]objectHeader
 	order               []uint64
@@ -148,6 +149,11 @@ func (v *graphVerifier) validateHeader() error {
 }
 
 func (v *graphVerifier) validateHeaderBounds() error {
+	if v.strict != nil {
+		var err error
+		v.arenaEnd, err = v.header.validateDeclaredArena(v.source.Len())
+		return err
+	}
 	if v.header.headerSize > v.source.Len() {
 		return fmt.Errorf("header_size %d exceeds file size", v.header.headerSize)
 	}
@@ -223,6 +229,11 @@ func (v *graphVerifier) readGraphObject(offset uint64, tail uint64) (objectHeade
 	if offset > v.source.Len()-objectHeaderSize {
 		return objectHeader{}, 0, fmt.Errorf("object header at offset %d exceeds file bounds", offset)
 	}
+	if v.strict != nil {
+		if err := v.header.validateArenaObject(offset, objectHeaderSize, v.arenaEnd); err != nil {
+			return objectHeader{}, 0, err
+		}
+	}
 	typ, err := verifySourceByte(v.source, offset)
 	if err != nil {
 		return objectHeader{}, 0, err
@@ -265,6 +276,11 @@ func (v *graphVerifier) validateGraphObject(offset uint64, obj objectHeader, ali
 	}
 	if offset%objectAlignment != 0 {
 		return fmt.Errorf("object offset %d is not aligned", offset)
+	}
+	if v.strict != nil {
+		if err := v.header.validateArenaObject(offset, obj.size, v.arenaEnd); err != nil {
+			return err
+		}
 	}
 	return v.validateGraphObjectFlags(offset, obj)
 }
@@ -810,6 +826,9 @@ func (v *graphVerifier) validateTailMetadata() error {
 	if len(v.entryObjects) == 0 {
 		if v.header.nEntries != 0 {
 			return fmt.Errorf("entries recorded but no ENTRY objects found")
+		}
+		if v.strict != nil {
+			return v.header.validateEmptyEntryMetadata()
 		}
 		return nil
 	}
