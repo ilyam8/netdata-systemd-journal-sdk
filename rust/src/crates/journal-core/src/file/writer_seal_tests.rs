@@ -321,6 +321,15 @@ fn sealed_writer_entry_before_start_rejected() {
             .is_err(),
         "expected before-start entry to be rejected"
     );
+    assert!(!writer.is_poisoned());
+    writer
+        .add_entry(
+            &mut journal_file,
+            &[b"MESSAGE=valid after validation failure"],
+            1_500_000,
+            100,
+        )
+        .unwrap();
 }
 
 #[test]

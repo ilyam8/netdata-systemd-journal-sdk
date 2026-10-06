@@ -43,6 +43,14 @@ Do not use this skill for:
 - The final writer target includes compression and Forward Secure Sealing, but implementation may be phased.
 - Live concurrency compatibility is mandatory for every writer and reader. A writer is not production-compatible unless stock `journalctl --file` and stock libsystemd readers can safely read the file while that writer is appending. A reader is not production-compatible unless it can safely read files while they are being appended by each repository writer and, where testable without violating repository-boundary rules, stock systemd writers.
 - The live concurrency contract is one writer plus multiple readers on the same journal file. Tests must cover online state, append publication windows, tail metadata changes, entry-array growth, reader follow/tail behavior, clean close verification, and interruption/reopen scenarios for the claimed feature slice.
+- Distinguish live mapping/access bounds from stable-file integrity checks. A
+  writer may publish rounded arena capacity before physical allocation reaches
+  it. Ordinary readers must still read committed entries safely; excluded-writer
+  snapshots, strict verification and append-open retain declared-arena checks.
+  Exercise the actual DATA-preparation window and physical growth boundary, not
+  only completed appends. `tests/interoperability/run_live_growth.py` supplies
+  deterministic regular/compact SDK writer-reader coverage; it supplements the
+  stock/live feature matrix rather than replacing it.
 - Writers expose a cross-language `live_publish_every_entries` publication
   cadence. The default `1` is the stock live-reader compatibility mode. `0`
   disables explicit SDK live publication, and `N > 1` publishes after every

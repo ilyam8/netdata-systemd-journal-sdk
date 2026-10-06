@@ -171,7 +171,8 @@ fn is_raw_field_name_valid(field_name: &[u8]) -> bool {
     !field_name.is_empty() && !field_name.contains(&b'=')
 }
 
-fn accept_entry_field(field: EntryField<'_>, policy: FieldNamePolicy) -> Result<bool> {
+#[doc(hidden)]
+pub fn accept_entry_field(field: EntryField<'_>, policy: FieldNamePolicy) -> Result<bool> {
     let Some(field_name) = field.field_name() else {
         return Err(JournalError::InvalidField);
     };
@@ -256,6 +257,9 @@ impl StoredDataPayload<'_> {
 }
 
 pub struct JournalWriter {
+    poisoned: bool,
+    #[cfg(test)]
+    fail_append_stage: u8,
     pub(super) tail_object_offset: NonZeroU64,
     pub(super) append_offset: NonZeroU64,
     next_seqnum: u64,
@@ -273,6 +277,21 @@ pub struct JournalWriter {
 }
 
 impl JournalWriter {
+    /// True after a mutating failure. Drop resources without publishing a clean state.
+    pub fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
+
+    #[cfg(test)]
+    fn fail_append_at(&self, stage: u8) -> Result<()> {
+        if self.fail_append_stage == stage {
+            return Err(JournalError::Io(std::io::Error::other(
+                "injected append failure",
+            )));
+        }
+        Ok(())
+    }
+
     /// Get current file size in bytes
     pub fn current_file_size(&self) -> u64 {
         self.append_offset.get()
@@ -355,6 +374,9 @@ impl JournalWriter {
             return Err(JournalError::UnsupportedJournalFile);
         }
 
+        journal_file.validate_committed_arena()?;
+        header.validate_empty_entry_metadata()?;
+
         let append_offset = {
             let header = journal_file.journal_header_ref();
 
@@ -364,7 +386,9 @@ impl JournalWriter {
 
             let tail_object = journal_file.object_header_ref(tail_object_offset)?;
 
-            tail_object_offset.saturating_add(tail_object.size)
+            tail_object_offset
+                .checked_add(tail_object.aligned_size())
+                .ok_or(JournalError::ObjectExceedsFileBounds)?
         };
 
         let seal = journal_file
@@ -374,6 +398,9 @@ impl JournalWriter {
             .transpose()?;
 
         let mut writer = Self {
+            poisoned: false,
+            #[cfg(test)]
+            fail_append_stage: 0,
             tail_object_offset: journal_file
                 .journal_header_ref()
                 .tail_object_offset
@@ -408,6 +435,9 @@ impl JournalWriter {
 
     /// Creates a successor writer for a new journal file
     pub fn create_successor(&self, journal_file: &mut JournalFile<MmapMut>) -> Result<Self> {
+        if self.poisoned {
+            return Err(JournalError::WriterPoisoned);
+        }
         Self::new_with_compression(
             journal_file,
             self.next_seqnum,
@@ -490,11 +520,19 @@ impl JournalWriter {
         monotonic: u64,
         options: EntryWriteOptions,
     ) -> Result<()> {
+        if self.poisoned {
+            return Err(JournalError::WriterPoisoned);
+        }
         self.ensure_keyed_append(journal_file)?;
         let entry_seqnum = self.entry_seqnum_for_options(options)?;
         let entry_boot_id = options.boot_id.unwrap_or(self.boot_id);
         let monotonic = self.clamp_same_boot_monotonic(journal_file, entry_boot_id, monotonic)?;
+        if let Some(seal) = &self.seal {
+            seal.need_evolve(realtime)?;
+        }
         let xor_hash = self.prepare_entry_items(journal_file, fields, realtime, options)?;
+        #[cfg(test)]
+        self.fail_append_at(1)?;
         let entry_offset = self.write_entry_object(
             journal_file,
             entry_seqnum,
@@ -503,7 +541,11 @@ impl JournalWriter {
             monotonic,
             xor_hash,
         )?;
+        #[cfg(test)]
+        self.fail_append_at(2)?;
         self.publish_entry_links(journal_file, entry_offset)?;
+        #[cfg(test)]
+        self.fail_append_at(3)?;
         self.entry_added(
             journal_file.journal_header_mut(),
             entry_offset,
@@ -512,7 +554,11 @@ impl JournalWriter {
             realtime,
             monotonic,
         );
-        self.publish_after_entry(journal_file)
+        #[cfg(test)]
+        self.fail_append_at(4)?;
+        self.publish_after_entry(journal_file)?;
+        self.poisoned = false;
+        Ok(())
     }
 
     fn ensure_keyed_append(&self, journal_file: &JournalFile<MmapMut>) -> Result<()> {
@@ -580,6 +626,13 @@ impl JournalWriter {
         if *publication_ready {
             return Ok(());
         }
+        // Set before any potentially partial I/O; only a fully published append clears it.
+        // Seal state is publication state too, even before the next file write.
+        if let Some(seal) = &self.seal {
+            if !self.first_tag_written || seal.need_evolve(realtime)? {
+                self.poisoned = true;
+            }
+        }
         self.ensure_first_tag(journal_file)?;
         self.maybe_append_tag(journal_file, realtime)?;
         *publication_ready = true;
@@ -639,6 +692,7 @@ impl JournalWriter {
             entry_offset,
             std::mem::size_of::<EntryObjectHeader>() as u64 + entry_payload_size,
         )?;
+        self.poisoned = true;
         let entry_size = {
             let size = Some(entry_payload_size);
             let mut entry_guard = journal_file.entry_mut(entry_offset, size)?;
@@ -801,6 +855,7 @@ impl JournalWriter {
         let data_offset = self.append_offset;
         let stored_payload = self.stored_data_payload(payload);
         self.ensure_data_object_fits(journal_file, data_offset, stored_payload.len() as u64)?;
+        self.poisoned = true;
         let data_size = {
             let mut data_guard =
                 journal_file.data_mut(data_offset, Some(stored_payload.len() as u64))?;

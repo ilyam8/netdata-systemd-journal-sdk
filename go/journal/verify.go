@@ -24,6 +24,9 @@ func (e *VerificationError) Error() string {
 // VerifyFile validates the structural integrity of a journal file.
 // It opens the file, validates the header, and walks all entries and
 // their referenced data objects. Compressed files are decompressed.
+// This compatibility check tolerates some incomplete final-entry links and
+// can revisit DATA posting lists for repeated values. Use VerifyIndex for
+// complete native-index consistency with work proportional to the graph.
 // For sealed journals, this validates structure only; use VerifyFileWithKey
 // when TAG/HMAC verification is required.
 func VerifyFile(path string) error {

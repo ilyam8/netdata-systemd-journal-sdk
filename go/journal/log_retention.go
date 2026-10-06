@@ -21,8 +21,8 @@ type retentionRun struct {
 // rotation or close. The current active file is counted in retention envelopes
 // and protected from deletion.
 func (l *Log) EnforceRetention() error {
-	if l.closed {
-		return errWriterClosed
+	if err := l.writable(); err != nil {
+		return err
 	}
 	return l.enforceRetention(l.activePath())
 }

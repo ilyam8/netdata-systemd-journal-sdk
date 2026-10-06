@@ -119,6 +119,7 @@ func (w *Writer) appendTag() error {
 	if w.seal == nil {
 		return nil
 	}
+	w.appendMutated = true
 	w.seal.hmacStart()
 
 	offset := w.appendOffset
@@ -189,6 +190,7 @@ func (w *Writer) maybeAppendTag(realtime uint64) error {
 		if epoch >= goal {
 			break
 		}
+		w.appendMutated = true
 		w.seal.fsprgState = fsprgEvolve(w.seal.fsprgState)
 		if w.seal.getEpoch() < goal {
 			if err := w.appendTag(); err != nil {
@@ -204,6 +206,7 @@ func (w *Writer) hmacPutHeader() error {
 	if w.seal == nil {
 		return nil
 	}
+	w.appendMutated = true
 	w.seal.hmacStart()
 
 	// signature through just before state: bytes 0-15
@@ -226,6 +229,7 @@ func (w *Writer) hmacPutHashTableObject(objectStart uint64) error {
 	if w.seal == nil {
 		return nil
 	}
+	w.appendMutated = true
 	w.seal.hmacStart()
 	buf := make([]byte, objectHeaderSize)
 	if err := w.readAt(buf, objectStart); err != nil {
@@ -242,6 +246,7 @@ func (w *Writer) hmacPutObject(objectStart uint64, typ uint8) error {
 	if w.seal == nil {
 		return nil
 	}
+	w.appendMutated = true
 	w.seal.hmacStart()
 
 	buf, objectSize, err := w.readHMACObjectHeader(objectStart)
@@ -314,6 +319,7 @@ func (w *Writer) hmacWriteObjectRange(offset, size uint64) error {
 	if err := w.readAt(buf, offset); err != nil {
 		return err
 	}
+	w.appendMutated = true
 	w.seal.hmacWrite(buf)
 	return nil
 }

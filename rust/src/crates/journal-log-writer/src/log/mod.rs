@@ -50,6 +50,7 @@ fn sync_archive_journal_file(
 
 /// Tracks rotation state for size and count limits.
 pub struct Log {
+    poisoned: bool,
     configured_dir: PathBuf,
     chain: OwnedChain,
     config: Config,
@@ -99,6 +100,23 @@ pub trait LogArtifactSizer: Send + Sync {
 }
 
 impl Log {
+    /// An uncertain writer must only be dropped/closed to release resources.
+    pub fn is_poisoned(&self) -> bool {
+        self.poisoned
+            || self
+                .active_file
+                .as_ref()
+                .is_some_and(|file| file.writer.is_poisoned())
+    }
+
+    fn ensure_healthy(&self) -> Result<()> {
+        if self.is_poisoned() {
+            Err(JournalError::WriterPoisoned.into())
+        } else {
+            Ok(())
+        }
+    }
+
     fn duration_to_micros(duration: std::time::Duration) -> u64 {
         duration.as_micros().try_into().unwrap_or(u64::MAX)
     }
@@ -141,6 +159,7 @@ impl Log {
     }
 
     fn prepare_append_for_realtime(&mut self, entry_realtime: u64) -> Result<()> {
+        self.ensure_healthy()?;
         self.apply_retention_on_open()?;
         let opened_first_active = self.active_file.is_none();
         if self.should_rotate_for_realtime(entry_realtime) {
@@ -154,6 +173,12 @@ impl Log {
 
     fn raw_items_for_policy<'a>(&self, items: &'a [&'a [u8]]) -> Result<Option<Vec<&'a [u8]>>> {
         if self.config.field_name_policy != FieldNamePolicy::JournalApp {
+            for item in items {
+                journal_core::file::writer::accept_entry_field(
+                    EntryField::raw(item),
+                    self.config.field_name_policy,
+                )?;
+            }
             return Ok(None);
         }
         let filtered_items = filter_raw_items_for_journal_app(items)?;
@@ -168,6 +193,12 @@ impl Log {
         fields: &'a [StructuredField<'a>],
     ) -> Result<Option<Vec<StructuredField<'a>>>> {
         if self.config.field_name_policy != FieldNamePolicy::JournalApp {
+            for field in fields {
+                journal_core::file::writer::accept_entry_field(
+                    EntryField::Structured(*field),
+                    self.config.field_name_policy,
+                )?;
+            }
             return Ok(None);
         }
         let filtered_fields = filter_structured_fields_for_journal_app(fields);
@@ -280,6 +311,7 @@ impl Log {
         let startup = build_startup_state(path, config)?;
 
         let mut log = Log {
+            poisoned: false,
             configured_dir: path.to_path_buf(),
             chain: startup.chain,
             config: startup.config,
@@ -354,8 +386,9 @@ impl Log {
         Self::require_entry_monotonic(&timestamps)?;
 
         let entry_realtime = self.peek_entry_realtime(&timestamps);
-        self.prepare_append_for_realtime(entry_realtime)?;
+        self.ensure_healthy()?;
         let filtered_items = self.raw_items_for_policy(items)?;
+        self.prepare_append_for_realtime(entry_realtime)?;
         let write_items = filtered_items.as_deref().unwrap_or(items);
 
         let (realtime, monotonic) = self.capture_dual_timestamp(Some(&timestamps))?;
@@ -431,8 +464,9 @@ impl Log {
         Self::require_entry_monotonic(&timestamps)?;
 
         let entry_realtime = self.peek_entry_realtime(&timestamps);
-        self.prepare_append_for_realtime(entry_realtime)?;
+        self.ensure_healthy()?;
         let filtered_fields = self.structured_fields_for_policy(fields)?;
+        self.prepare_append_for_realtime(entry_realtime)?;
         let write_fields = filtered_fields.as_deref().unwrap_or(fields);
 
         let (realtime, monotonic) = self.capture_dual_timestamp(Some(&timestamps))?;
@@ -575,8 +609,11 @@ impl Log {
     /// This should be called after writing a batch of log entries to ensure
     /// they are persisted to disk before acknowledging the request.
     pub fn sync(&mut self) -> Result<()> {
+        self.ensure_healthy()?;
         if let Some(active_file) = &mut self.active_file {
+            self.poisoned = true;
             active_file.journal_file.sync()?;
+            self.poisoned = false;
         }
         Ok(())
     }
@@ -603,6 +640,10 @@ impl Log {
     fn close_impl(mut self, enforce_retention: bool) -> Result<()> {
         use journal_core::file::JournalState;
 
+        if self.is_poisoned() {
+            self.active_file.take();
+            return Err(JournalError::WriterPoisoned.into());
+        }
         let Some(mut active_file) = self.active_file.take() else {
             return Ok(());
         };
@@ -680,6 +721,7 @@ impl Log {
     /// close. The current active file is counted in retention envelopes and is
     /// protected from deletion.
     pub fn enforce_retention(&mut self) -> Result<()> {
+        self.ensure_healthy()?;
         let protected_file = if let Some(active_file) = &self.active_file {
             self.chain.update_file_size(
                 &active_file.repository_file,
@@ -704,7 +746,8 @@ impl Log {
     fn prepare_initial_rotation(&mut self) -> Result<()> {
         self.update_active_file_size();
         if self.active_file.is_none() && self.config.strict_systemd_naming {
-            self.chain.archive_existing_active_file()?;
+            self.chain
+                .archive_existing_active_file(self.config.sync_on_archive)?;
         }
         Ok(())
     }
@@ -785,6 +828,8 @@ impl Log {
 
     #[tracing::instrument(skip_all, fields(active_file))]
     fn rotate(&mut self, head_realtime: u64, reason: LogLifecycleReason) -> Result<()> {
+        self.ensure_healthy()?;
+        self.poisoned = true;
         self.prepare_initial_rotation()?;
         let max_file_size = self.config.rotation_policy.size_of_journal_file;
         let (new_file, lifecycle_event) = if let Some(old_file) = self.active_file.take() {
@@ -796,6 +841,7 @@ impl Log {
         tracing::Span::current().record("new_file", new_file.repository_file.path());
 
         self.active_file = Some(new_file);
+        self.poisoned = false;
         self.rotation_state.reset();
         self.update_active_file_size();
         self.emit_lifecycle_event(&lifecycle_event);
@@ -941,6 +987,9 @@ impl Drop for Log {
     fn drop(&mut self) {
         use journal_core::file::JournalState;
 
+        if self.is_poisoned() {
+            return;
+        }
         if let Some(ref mut active_file) = self.active_file {
             // Keep the active path stable on close so file-backed readers that
             // already follow system.journal can finish. The next writer startup
@@ -963,7 +1012,7 @@ mod tests {
     use std::sync::Mutex;
     use tempfile::TempDir;
 
-    static ARCHIVE_SYNC_TEST_LOCK: Mutex<()> = Mutex::new(());
+    pub(super) static ARCHIVE_SYNC_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn test_uuid(seed: u8) -> uuid::Uuid {
         uuid::Uuid::from_bytes([seed; 16])
@@ -1170,5 +1219,102 @@ mod tests {
             file.journal_header_ref().state,
             journal_core::file::JournalState::Archived as u8
         );
+    }
+}
+
+#[cfg(test)]
+mod poison_tests {
+    use super::*;
+
+    #[test]
+    fn poisoned_first_append_close_and_drop_preserve_active_file() {
+        let _guard = super::tests::ARCHIVE_SYNC_TEST_LOCK.lock().unwrap();
+        for compact in [false, true] {
+            for explicit_close in [false, true] {
+                let dir = tempfile::tempdir().unwrap();
+                let config = Config::new(
+                    journal_registry::Origin {
+                        machine_id: Some(uuid::Uuid::from_bytes([1; 16])),
+                        namespace: None,
+                        source: journal_registry::Source::System,
+                    },
+                    RotationPolicy::default(),
+                    RetentionPolicy::default(),
+                )
+                .with_boot_id(uuid::Uuid::from_bytes([2; 16]))
+                .with_strict_systemd_naming(true)
+                .with_compact(compact);
+                let mut log = Log::new(dir.path(), config).unwrap();
+                log.prepare_append_for_realtime(1_000_000).unwrap();
+                let path = log.active_path().unwrap().to_path_buf();
+                let active = log.active_file.as_mut().unwrap();
+                // A real partial mutation: first DATA is linked, then the next
+                // streamed field fails validation before ENTRY publication.
+                assert!(
+                    active
+                        .write_entry_fields(
+                            [
+                                EntryField::raw(b"MESSAGE=partial"),
+                                EntryField::raw(b"invalid")
+                            ],
+                            1_000_000,
+                            1,
+                            EntryWriteOptions::default()
+                        )
+                        .is_err()
+                );
+                assert_eq!(active.journal_file.journal_header_ref().n_entries, 0);
+                assert!(log.is_poisoned());
+                let before = std::fs::read(&path).unwrap();
+                assert!(log.sync().is_err());
+                assert!(
+                    log.write_entry_with_timestamps(
+                        &[b"MESSAGE=retry"],
+                        EntryTimestamps::default()
+                            .with_entry_realtime_usec(2_000_000)
+                            .with_entry_monotonic_usec(2)
+                    )
+                    .is_err()
+                );
+                if explicit_close {
+                    assert!(log.close().is_err());
+                } else {
+                    drop(log);
+                }
+                assert_eq!(std::fs::read(&path).unwrap(), before);
+                assert_eq!(
+                    std::fs::read_dir(path.parent().unwrap()).unwrap().count(),
+                    1
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_input_keeps_log_reusable_before_rotation_or_mutation() {
+        let _guard = super::tests::ARCHIVE_SYNC_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config::new(
+            journal_registry::Origin {
+                machine_id: Some(uuid::Uuid::from_bytes([1; 16])),
+                namespace: None,
+                source: journal_registry::Source::System,
+            },
+            RotationPolicy::default(),
+            RetentionPolicy::default(),
+        )
+        .with_boot_id(uuid::Uuid::from_bytes([2; 16]));
+        let mut log = Log::new(dir.path(), config).unwrap();
+        let timestamps = EntryTimestamps::default()
+            .with_entry_realtime_usec(1_000_000)
+            .with_entry_monotonic_usec(1);
+        assert!(
+            log.write_entry_with_timestamps(&[b"MESSAGE=valid", b"invalid"], timestamps)
+                .is_err()
+        );
+        assert!(!log.is_poisoned());
+        log.write_entry_with_timestamps(&[b"MESSAGE=valid"], timestamps)
+            .unwrap();
+        log.close().unwrap();
     }
 }

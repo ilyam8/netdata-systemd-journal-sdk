@@ -108,7 +108,10 @@ func isZeroUUID(id UUID) bool {
 }
 
 func (w *Writer) initialize(opts Options) error {
-	layout := initialWriterLayout(opts)
+	layout, err := initialWriterLayout(opts)
+	if err != nil {
+		return err
+	}
 
 	fileSize, ok := roundUpToFileSizeIncrease(layout.appendOffset)
 	if !ok {
@@ -206,9 +209,19 @@ type initialLayout struct {
 	appendOffset      uint64
 }
 
-func initialWriterLayout(opts Options) initialLayout {
-	dataSize := uint64(opts.DataHashTableBuckets * hashItemSize)
-	fieldSize := uint64(opts.FieldHashTableBuckets * hashItemSize)
+func initialWriterLayout(opts Options) (initialLayout, error) {
+	// Bound the aggregate before multiplication or addition. All derived byte
+	// offsets must fit int64, independently of the native int width.
+	const maxBuckets = (uint64(1<<63-1) - headerSize - 2*objectHeaderSize) / hashItemSize
+	if opts.DataHashTableBuckets <= 0 || opts.FieldHashTableBuckets <= 0 {
+		return initialLayout{}, fmt.Errorf("%w: hash table bucket counts must be positive", errInvalidJournal)
+	}
+	dataBuckets, fieldBuckets := uint64(opts.DataHashTableBuckets), uint64(opts.FieldHashTableBuckets)
+	if dataBuckets > maxBuckets || fieldBuckets > maxBuckets-dataBuckets {
+		return initialLayout{}, fmt.Errorf("%w: initial hash tables exceed file bounds", errInvalidJournal)
+	}
+	dataSize := dataBuckets * hashItemSize
+	fieldSize := fieldBuckets * hashItemSize
 	fieldObjectOffset := uint64(headerSize)
 	dataObjectOffset := align8(fieldObjectOffset + objectHeaderSize + fieldSize)
 	return initialLayout{
@@ -219,7 +232,7 @@ func initialWriterLayout(opts Options) initialLayout {
 		fieldOffset:       fieldObjectOffset + objectHeaderSize,
 		dataOffset:        dataObjectOffset + objectHeaderSize,
 		appendOffset:      align8(dataObjectOffset + objectHeaderSize + dataSize),
-	}
+	}, nil
 }
 
 func newInitialHeader(opts Options, layout initialLayout, fileSize uint64, compatibleFlags, incFlags uint32) journalHeader {
@@ -273,6 +286,7 @@ func (w *Writer) postChange() error {
 	if !ok || size > uint64(int64(^uint64(0)>>1)) {
 		return fmt.Errorf("%w: journal file too large", errInvalidJournal)
 	}
+	w.appendMutated = true
 	return w.file.Truncate(int64(size))
 }
 
@@ -302,8 +316,17 @@ func (w *Writer) readAt(dst []byte, offset uint64) error {
 
 func (w *Writer) writeAt(offset uint64, src []byte) error {
 	if w.arena != nil {
-		return w.arena.writeAt(offset, src)
+		dst, direct, err := w.arena.directBytesAt(offset, uint64(len(src)))
+		if err != nil {
+			return err
+		}
+		if direct {
+			w.appendMutated = true
+			copy(dst, src)
+			return nil
+		}
 	}
+	w.appendMutated = true
 	_, err := w.file.WriteAt(src, int64(offset))
 	return err
 }
@@ -401,6 +424,9 @@ func (w *Writer) newObjectBuffer(offset, size uint64) ([]byte, bool, error) {
 	}
 	if w.arena != nil {
 		if data, ok, err := w.arena.directBytesAt(offset, alignedSize); err != nil || ok {
+			if err == nil && ok {
+				w.appendMutated = true
+			}
 			return data, ok, err
 		}
 	}
@@ -433,6 +459,7 @@ func (w *Writer) objectAdded(offset, size uint64) error {
 	if offset > ^uint64(0)-size {
 		return fmt.Errorf("%w: object exceeds file bounds", errInvalidJournal)
 	}
+	w.appendMutated = true
 	w.header.tailObjectOffset = offset
 	w.appendOffset = align8(offset + size)
 	w.header.nObjects++
@@ -451,6 +478,10 @@ func (w *Writer) ensureArenaSize(requiredSize uint64) error {
 	if w.compact && newSize > journalCompactSizeMax {
 		return fmt.Errorf("%w: compact journal cannot exceed 4 GiB", errInvalidJournal)
 	}
+	if err := checkArenaSize(newSize); err != nil {
+		return err
+	}
+	w.appendMutated = true
 	if w.arena != nil {
 		if err := w.arena.remap(newSize); err != nil {
 			return err

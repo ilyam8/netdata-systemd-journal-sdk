@@ -990,7 +990,7 @@ func TestLogSyncOnArchivePolicyAppliesToStrictStartupArchive(t *testing.T) {
 	}
 }
 
-func TestLogRotationRetriesAfterArchiveCleanupFailure(t *testing.T) {
+func TestLogRotationRejectsRetryAfterArchiveCleanupFailure(t *testing.T) {
 	log, dir := newTestLog(t, LogConfig{
 		Options:        testOptions(),
 		Source:         "system",
@@ -1022,23 +1022,25 @@ func TestLogRotationRetriesAfterArchiveCleanupFailure(t *testing.T) {
 
 	if err := log.Append([]Field{
 		StringField("MESSAGE", "rotation cleanup retry"),
-	}, EntryOptions{RealtimeUsec: 1_700_002_700_000_002, MonotonicUsec: 3}); err != nil {
-		t.Fatalf("Append(retry) error = %v", err)
+	}, EntryOptions{RealtimeUsec: 1_700_002_700_000_002, MonotonicUsec: 3}); !errors.Is(err, ErrWriterFailed) {
+		t.Fatalf("Append(retry) error = %v, want ErrWriterFailed", err)
 	}
-	if err := log.Close(); err != nil {
-		t.Fatalf("Close(after retry) error = %v", err)
+	if err := log.Sync(); !errors.Is(err, ErrWriterFailed) {
+		t.Fatalf("Sync(after archive failure) = %v", err)
+	}
+	if err := log.EnforceRetention(); !errors.Is(err, ErrWriterFailed) {
+		t.Fatalf("EnforceRetention(after archive failure) = %v", err)
+	}
+	if err := log.Close(); !errors.Is(err, syntheticErr) {
+		t.Fatalf("Close(after retry) error = %v, want original failure", err)
 	}
 
 	files := journalFiles(t, dir)
-	if len(files) != 2 {
-		t.Fatalf("journal files after retry = %d, want 2; files=%v", len(files), files)
+	if len(files) != 1 {
+		t.Fatalf("journal files after retry = %d, want 1; files=%v", len(files), files)
 	}
 	first := readJournalSnapshot(t, files[0]).header
-	second := readJournalSnapshot(t, files[1]).header
 	if first.headEntrySeqnum != 1 || first.tailEntrySeqnum != 1 {
 		t.Fatalf("first file seqnum range = [%d,%d], want [1,1]", first.headEntrySeqnum, first.tailEntrySeqnum)
-	}
-	if second.headEntrySeqnum != 2 || second.tailEntrySeqnum != 2 {
-		t.Fatalf("second file seqnum range = [%d,%d], want [2,2]", second.headEntrySeqnum, second.tailEntrySeqnum)
 	}
 }

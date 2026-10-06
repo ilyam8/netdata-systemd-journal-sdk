@@ -1,10 +1,10 @@
 # SOW Status
 
-Last updated: 2026-10-03
+Last updated: 2026-10-06
 
 ## Current
 
-- None.
+None.
 
 ## Pending
 
@@ -44,6 +44,12 @@ Last updated: 2026-10-03
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
+
+- SOW-0147 - Indexed Snapshots For Domain History: completed again. Commit 7c82941 addresses all 19 Codacy findings with behavior-preserving decomposition, formatting and narrow audited annotations. Both CodeQL collection-operation alerts are documented false positives, still open remotely. Tests, analyzers, bounded benchmarks and independent review pass; no push or remote mutation.
+
+- SOW-0149 - Snapshot Payload Header Cost: completed. Commit 0d365e2 removes unnecessary Go DATA parsing in payload traversal; SDK broad fixture improves 23 percent and current DEM broad queries improve 18-20 percent. Contract tests, race checks, controlled benchmarks and independent review pass.
+
+- SOW-0148 - Indexed Snapshot Archive State: completed. Go IsArchived and Rust is_archived expose frozen metadata for approved recovery; real archive-transition tests, focused suites, published examples and bounded independent review pass. Local-only follow-up.
 
 - SOW-0145 - Rust Close Without Retention And v0.8.2: completed and published.
   All eight Rust `0.8.2` crates are indexed and non-yanked from merged PR #3

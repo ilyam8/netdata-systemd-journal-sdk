@@ -104,6 +104,8 @@ type Writer struct {
 	nextSeqnum        uint64
 	bootID            UUID
 	closed            bool
+	failure           error
+	appendMutated     bool
 	compression       int
 	compressThreshold int
 	compact           bool
@@ -116,6 +118,28 @@ type Writer struct {
 	livePublishEveryEntries     uint64
 	entriesSinceLivePublication uint64
 	fieldNamePolicy             FieldNamePolicy
+}
+
+// ErrWriterFailed marks an uncertain mutating failure. The writer cannot be
+// reused; Close only releases resources. Run VerifyIndex before recovering the
+// file with a new writer. The original failure remains available via errors.Is.
+var ErrWriterFailed = errors.New("journal: writer failed; verify before recovery")
+
+func (w *Writer) writable() error {
+	if w.failure != nil {
+		return w.failure
+	}
+	if w.closed {
+		return errWriterClosed
+	}
+	return nil
+}
+
+func (w *Writer) fail(err error) error {
+	if err != nil && w.failure == nil {
+		w.failure = errors.Join(ErrWriterFailed, err)
+	}
+	return w.failure
 }
 
 var syncArchiveJournalFile = func(w *Writer) error {
@@ -169,8 +193,7 @@ func Create(path string, opts Options) (*Writer, error) {
 		return nil, err
 	}
 	if err := f.Truncate(0); err != nil {
-		_ = f.Close()
-		return nil, err
+		return nil, errors.Join(ErrWriterFailed, err, f.Close())
 	}
 
 	w := &Writer{
@@ -180,9 +203,7 @@ func Create(path string, opts Options) (*Writer, error) {
 		fieldNamePolicy:         opts.FieldNamePolicy,
 	}
 	if err := w.initialize(opts); err != nil {
-		_ = w.closeArena()
-		_ = f.Close()
-		return nil, err
+		return nil, errors.Join(w.fail(err), w.release())
 	}
 	return w, nil
 }
@@ -239,15 +260,33 @@ func newAppendWriter(path string, f *os.File, opts Options) (*Writer, error) {
 		return nil, err
 	}
 
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	fileSize := uint64(stat.Size())
+	arenaEnd, err := header.validateDeclaredArena(fileSize)
+	if err != nil {
+		return nil, err
+	}
+	if err := header.validateEmptyEntryMetadata(); err != nil {
+		return nil, err
+	}
 	tail, err := readObjectHeaderAt(f, header.tailObjectOffset)
 	if err != nil {
 		return nil, err
 	}
-	fileSize, err := appendArenaFileSize(header)
-	if err != nil {
+	// Mapping resizes the file, so prove the complete tail fits before mapping.
+	if err := header.validateArenaObject(header.tailObjectOffset, tail.size, arenaEnd); err != nil {
 		return nil, err
 	}
+	if header.isCompact() && fileSize > journalCompactSizeMax {
+		return nil, fmt.Errorf("%w: compact journal cannot exceed 4 GiB", errInvalidJournal)
+	}
 
+	// Retain physical preallocation in the writable arena so mapping and later
+	// publication cannot truncate padding beyond the original declared arena.
+	header.arenaSize = fileSize - header.headerSize
 	header.state = stateOnline
 	w := &Writer{
 		file:                    f,
@@ -274,14 +313,6 @@ func newAppendWriter(path string, f *os.File, opts Options) (*Writer, error) {
 		return nil, err
 	}
 	return w, nil
-}
-
-func appendArenaFileSize(header journalHeader) (uint64, error) {
-	fileSize, ok := checkedAdd(header.headerSize, header.arenaSize)
-	if !ok {
-		return 0, errInvalidJournal
-	}
-	return fileSize, nil
 }
 
 func (w *Writer) applyAppendBootID(opts Options) error {
@@ -361,8 +392,8 @@ func (w *Writer) AppendMapWithOptions(fields map[string]string, opts EntryOption
 
 // Append appends one journal entry.
 func (w *Writer) Append(fields []Field, opts EntryOptions) error {
-	if w.closed {
-		return errWriterClosed
+	if err := w.writable(); err != nil {
+		return err
 	}
 	preparedFields, err := prepareFieldsForPolicy(fields, w.fieldNamePolicy)
 	if err != nil {
@@ -382,8 +413,8 @@ func (w *Writer) Append(fields []Field, opts EntryOptions) error {
 // The first '=' byte separates the field name from the value; later '=' bytes
 // and arbitrary value bytes are preserved.
 func (w *Writer) AppendRaw(payloads [][]byte, opts EntryOptions) error {
-	if w.closed {
-		return errWriterClosed
+	if err := w.writable(); err != nil {
+		return err
 	}
 	preparedPayloads, err := prepareRawPayloadsForPolicy(payloads, w.fieldNamePolicy)
 	if err != nil {
@@ -395,7 +426,7 @@ func (w *Writer) AppendRaw(payloads [][]byte, opts EntryOptions) error {
 	}, opts)
 }
 
-func (w *Writer) appendPayloads(count int, payloadAt func(int) []byte, opts EntryOptions) error {
+func (w *Writer) appendPayloads(count int, payloadAt func(int) []byte, opts EntryOptions) (err error) {
 	if count == 0 {
 		return errEntryEmpty
 	}
@@ -404,6 +435,15 @@ func (w *Writer) appendPayloads(count int, payloadAt func(int) []byte, opts Entr
 	if err != nil {
 		return err
 	}
+
+	// Storage and sealing primitives mark the first possible mutation. Read-only
+	// lookup and capacity failures leave the writer reusable.
+	w.appendMutated = false
+	defer func() {
+		if err != nil && w.appendMutated {
+			err = w.fail(err)
+		}
+	}()
 
 	if err := w.maybeAppendTag(opts.RealtimeUsec); err != nil {
 		return err
@@ -476,6 +516,11 @@ func (w *Writer) prepareEntryOptions(opts EntryOptions) (EntryOptions, uint64, e
 			return opts, 0, errInvalidJournal
 		}
 		entrySeqnum = opts.Seqnum
+	}
+	if w.seal != nil {
+		if _, err := w.seal.needEvolve(opts.RealtimeUsec); err != nil {
+			return opts, 0, err
+		}
 	}
 	return opts, entrySeqnum, nil
 }
@@ -565,20 +610,24 @@ func (w *Writer) publishEntryObject(entryOffset uint64, items []entryItem, entry
 
 // Sync flushes file data and metadata to disk.
 func (w *Writer) Sync() error {
-	if w.closed {
-		return errWriterClosed
-	}
-	if err := w.writeHeader(); err != nil {
+	if err := w.writable(); err != nil {
 		return err
 	}
-	return w.syncArena()
+	if err := w.writeHeader(); err != nil {
+		return w.fail(err)
+	}
+	return w.fail(w.syncArena())
 }
 
+// Close syncs and closes the journal, leaving its online state unchanged. After
+// a mutating failure it only releases resources and returns the stored failure.
+// Subsequent Close calls return nil once resources have been released.
 func (w *Writer) Close() error {
 	return w.closeWithState(stateOnline)
 }
 
-// CloseOffline marks the journal offline, syncs it, and closes it.
+// CloseOffline marks the journal offline, syncs it, and closes it. After a
+// mutating failure it only releases resources and returns the stored failure.
 func (w *Writer) CloseOffline() error {
 	return w.closeWithState(stateOffline)
 }
@@ -587,13 +636,27 @@ func (w *Writer) closeWithState(state uint8) error {
 	if w.closed {
 		return nil
 	}
-	w.header.state = state
-	err1 := w.writeHeader()
-	err2 := w.syncArena()
-	err3 := w.closeArena()
-	err4 := w.file.Close()
+	if w.failure == nil {
+		w.header.state = state
+		if err := w.writeHeader(); err != nil {
+			w.fail(err)
+		} else {
+			w.fail(w.syncArena())
+		}
+	}
+	closeErr := w.release()
+	if w.failure != nil {
+		return errors.Join(w.failure, closeErr)
+	}
+	return w.fail(closeErr)
+}
+
+// release never writes metadata or syncs an uncertain journal.
+func (w *Writer) release() error {
+	arenaErr := w.closeArena()
+	closeErr := w.file.Close()
 	w.closed = true
-	return errors.Join(err1, err2, err3, err4)
+	return errors.Join(arenaErr, closeErr)
 }
 
 // CurrentSize returns the current committed journal file size in bytes.
@@ -607,10 +670,15 @@ func (w *Writer) ArchiveTo(path string) error {
 	return w.archiveTo(path, true)
 }
 
-func (w *Writer) archiveTo(path string, syncOnArchive bool) error {
-	if w.closed {
-		return errWriterClosed
+func (w *Writer) archiveTo(path string, syncOnArchive bool) (err error) {
+	if err := w.writable(); err != nil {
+		return err
 	}
+	defer func() {
+		if err != nil {
+			err = w.fail(err)
+		}
+	}()
 	w.header.state = stateArchived
 	if err := w.writeHeader(); err != nil {
 		return err
@@ -622,18 +690,12 @@ func (w *Writer) archiveTo(path string, syncOnArchive bool) error {
 	}
 	if w.path != path {
 		if err := os.Rename(w.path, path); err != nil {
-			w.header.state = stateOnline
-			restoreErr := w.writeHeader()
-			syncErr := w.syncArena()
-			return errors.Join(err, restoreErr, syncErr)
+			return err
 		}
 	}
 	w.path = path
 	dirErr := syncJournalDirectory(path)
-	arenaErr := w.closeArena()
-	closeErr := w.file.Close()
-	w.closed = true
-	if err := errors.Join(dirErr, arenaErr, closeErr); err != nil {
+	if err := errors.Join(dirErr, w.release()); err != nil {
 		return err
 	}
 	return nil

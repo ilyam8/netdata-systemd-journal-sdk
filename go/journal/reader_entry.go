@@ -274,18 +274,18 @@ func (r *Reader) readDataPayloadRow(offset uint64) ([]byte, error) {
 	return payload, nil
 }
 
-func (r *Reader) visitDataPayloadWithHeader(offset uint64, header dataHeader, visit func([]byte) error) error {
+func (r *Reader) visitDataPayloadWithHeader(offset uint64, header objectHeader, visit func([]byte) error) error {
 	payloadOffset := r.dataPayloadOffset()
-	if header.object.typ != objectTypeData || header.object.size < payloadOffset {
+	if header.typ != objectTypeData || header.size < payloadOffset {
 		return errCorruptObject
 	}
 
-	payloadLen := header.object.size - payloadOffset
+	payloadLen := header.size - payloadOffset
 	payload, err := r.readSlice(offset+payloadOffset, payloadLen)
 	if err != nil {
 		return err
 	}
-	payload, err = decompressDataPayload(header.object.flag, payload)
+	payload, err = decompressDataPayload(header.flag, payload)
 	if err != nil {
 		return err
 	}

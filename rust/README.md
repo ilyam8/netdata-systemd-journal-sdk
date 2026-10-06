@@ -524,3 +524,13 @@ cargo run --manifest-path rust/Cargo.toml -p journalctl -- \
 cargo run --manifest-path rust/Cargo.toml -p journalctl -- \
   --file ./active.journal --follow --no-tail --boot=all
 ```
+
+## Unreleased indexed snapshots
+
+The source tree adds bounded `IndexedSnapshot` traversal and strict offline index
+verification for uncertain files. See [Indexed snapshots](../docs/Indexed-Snapshots.md)
+for API examples, caller exclusion, borrowed payloads and recovery costs. Failures
+after a possible file or publication-state mutation prevent further mutation and
+preserve uncertain files during cleanup. Validation and capacity failures known
+to precede mutation leave the writer reusable. These additions are not included
+in the previously published versions listed above.

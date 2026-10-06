@@ -377,6 +377,10 @@ class GoWrappingTests(unittest.TestCase):
         self.assertIn('"fmt"', imports)
         self.assertIn('"os"', imports)
 
+    def test_detect_go_imports_context(self):
+        imports = ve.detect_go_imports("ctx := context.Background()", "")
+        self.assertIn('"context"', imports)
+
     def test_detect_go_imports_returns_unique(self):
         imports = ve.detect_go_imports("fmt.Fprintf(os.Stderr, \"\")", "")
         self.assertEqual(imports.count('"fmt"'), 1)

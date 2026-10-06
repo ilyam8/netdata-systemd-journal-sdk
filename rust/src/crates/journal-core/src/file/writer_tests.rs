@@ -203,6 +203,8 @@ fn write_test_bytes_at(file: &mut std::fs::File, bytes: &[u8], offset: u64) -> s
 
 fn zstd_writer(threshold: usize) -> JournalWriter {
     JournalWriter {
+        poisoned: false,
+        fail_append_stage: 0,
         tail_object_offset: NonZeroU64::new(8).unwrap(),
         append_offset: NonZeroU64::new(16).unwrap(),
         next_seqnum: 1,
@@ -978,4 +980,145 @@ fn writer_initial_arena_covers_large_hash_tables() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[test]
+fn all_mutating_append_stages_poison_writer_and_block_retry() {
+    for compact in [false, true] {
+        for stage in 1..=4 {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("failure.journal");
+            let repository = crate::repository::File::from_path(&path).unwrap();
+            let mut file = JournalFile::create(
+                &repository,
+                JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3))
+                    .with_compact(compact),
+            )
+            .unwrap();
+            let mut writer = JournalWriter::new(&mut file, 1, test_uuid(2)).unwrap();
+            writer.fail_append_stage = stage;
+            assert!(
+                writer
+                    .add_entry(&mut file, &[b"MESSAGE=value"], 1_000_000, 1)
+                    .is_err()
+            );
+            assert!(writer.is_poisoned());
+            let before = std::fs::read(&path).unwrap();
+            writer.fail_append_stage = 0;
+            assert!(matches!(
+                writer.add_entry(&mut file, &[b"MESSAGE=retry"], 2_000_000, 2),
+                Err(JournalError::WriterPoisoned)
+            ));
+            drop(writer);
+            drop(file);
+            assert_eq!(before, std::fs::read(path).unwrap());
+        }
+    }
+}
+
+#[test]
+fn compact_preflight_failure_without_mutation_allows_retry() {
+    for structured in [false, true] {
+        for existing_data in [false, true] {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("preflight.journal");
+            let repository = crate::repository::File::from_path(&path).unwrap();
+            let mut file = JournalFile::create(
+                &repository,
+                JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3))
+                    .with_compact(true),
+            )
+            .unwrap();
+            let mut writer = JournalWriter::new(&mut file, 1, test_uuid(2)).unwrap();
+            writer
+                .add_entry(&mut file, &[b"MESSAGE=value"], 1_000_000, 1)
+                .unwrap();
+            // Exercise the size preflight without allocating a four-gigabyte fixture.
+            let actual_offset = writer.append_offset;
+            writer.append_offset = NonZeroU64::new(super::JOURNAL_COMPACT_SIZE_MAX - 7).unwrap();
+            let before = std::fs::read(&path).unwrap();
+            let payload: &[u8] = if existing_data {
+                b"MESSAGE=value"
+            } else {
+                b"MESSAGE=new"
+            };
+            let field = if structured {
+                EntryField::structured(b"MESSAGE", if existing_data { b"value" } else { b"new" })
+            } else {
+                EntryField::raw(payload)
+            };
+            assert!(matches!(
+                writer.add_entry_fields(&mut file, [field], 2_000_000, 2),
+                Err(JournalError::ObjectExceedsFileBounds)
+            ));
+            assert_eq!(before, std::fs::read(&path).unwrap());
+            assert!(
+                !writer.is_poisoned(),
+                "read-only size rejection poisoned the writer"
+            );
+            writer.append_offset = actual_offset;
+            writer
+                .add_entry(&mut file, &[b"MESSAGE=value"], 2_000_000, 2)
+                .unwrap();
+            assert_eq!(file.journal_header_ref().n_entries, 2);
+        }
+    }
+}
+
+#[test]
+fn append_validation_poison_depends_on_prior_publication_mutation() {
+    for structured in [false, true] {
+        for sealed in [false, true] {
+            for (value, realtime, poisoned) in [
+                ("value", 1_500_001, false),
+                ("new", 1_500_001, true),
+                ("value", 2_500_000, sealed),
+            ] {
+                let dir = TempDir::new().unwrap();
+                let path = dir.path().join("validation.journal");
+                let repository = crate::repository::File::from_path(&path).unwrap();
+                let mut options = JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3));
+                if sealed {
+                    options = options.with_seal(test_seal_opts());
+                }
+                let mut file = JournalFile::create(&repository, options).unwrap();
+                let mut writer = JournalWriter::new(&mut file, 1, test_uuid(2)).unwrap();
+                writer
+                    .add_entry(&mut file, &[b"MESSAGE=value"], 1_500_000, 1)
+                    .unwrap();
+                let before = std::fs::read(&path).unwrap();
+                let payload = format!("MESSAGE={value}");
+                let fields = if structured {
+                    [
+                        EntryField::structured(b"MESSAGE", value.as_bytes()),
+                        EntryField::structured(b"", b"bad"),
+                    ]
+                } else {
+                    [EntryField::raw(payload.as_bytes()), EntryField::raw(b"bad")]
+                };
+                assert!(
+                    writer
+                        .add_entry_fields(&mut file, fields, realtime, 2)
+                        .is_err()
+                );
+                assert_eq!(
+                    writer.is_poisoned(),
+                    poisoned,
+                    "sealed={sealed} value={value} realtime={realtime}"
+                );
+                if poisoned {
+                    assert!(matches!(
+                        writer.add_entry(&mut file, &[b"MESSAGE=value"], realtime, 2),
+                        Err(JournalError::WriterPoisoned)
+                    ));
+                } else {
+                    assert_eq!(before, std::fs::read(&path).unwrap());
+                    writer
+                        .add_entry(&mut file, &[b"MESSAGE=value"], realtime, 2)
+                        .unwrap();
+                    assert_eq!(file.journal_header_ref().n_entries, 2);
+                }
+            }
+        }
+    }
 }

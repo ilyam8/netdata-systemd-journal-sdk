@@ -3,6 +3,9 @@ use std::io::Read;
 
 pub(crate) trait VerifyByteSource {
     fn len(&self) -> u64;
+    fn check(&self) -> Result<(), String> {
+        Ok(())
+    }
     fn read_vec(&self, offset: u64, size: u64) -> Result<Vec<u8>, String>;
 }
 

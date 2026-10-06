@@ -1,6 +1,7 @@
 package journal
 
 import (
+	"bytes"
 	"fmt"
 	"math/bits"
 )
@@ -14,6 +15,7 @@ const (
 )
 
 type graphDataObject struct {
+	fieldName              string
 	hash                   uint64
 	nextHashOffset         uint64
 	nextFieldOffset        uint64
@@ -22,6 +24,11 @@ type graphDataObject struct {
 	nEntries               uint64
 	tailEntryArrayOffset   uint32
 	tailEntryArrayNEntries uint32
+}
+
+type graphFieldObject struct {
+	name                                 string
+	hash, nextHashOffset, headDataOffset uint64
 }
 
 type graphEntryObject struct {
@@ -51,26 +58,36 @@ type graphWalkState struct {
 type graphVerifier struct {
 	source              verifyByteSource
 	header              journalHeader
+	arenaEnd            uint64
 	compacted           bool
 	spans               map[uint64]objectHeader
 	order               []uint64
 	dataObjects         map[uint64]graphDataObject
-	fieldObjects        map[uint64]struct{}
+	fieldObjects        map[uint64]graphFieldObject
 	entryObjects        map[uint64]graphEntryObject
 	entryArrays         map[uint64]graphEntryArray
 	counts              map[uint8]uint64
 	mainEntryArrayFound bool
+	strict              *indexGraphState
 }
 
 func verifyObjectGraph(source verifyByteSource) error {
+	return verifyObjectGraphMode(source, nil)
+}
+
+func verifyObjectGraphMode(source verifyByteSource, strict *indexGraphState) error {
 	v := &graphVerifier{
 		source:       source,
+		strict:       strict,
 		spans:        make(map[uint64]objectHeader),
 		dataObjects:  make(map[uint64]graphDataObject),
-		fieldObjects: make(map[uint64]struct{}),
+		fieldObjects: make(map[uint64]graphFieldObject),
 		entryObjects: make(map[uint64]graphEntryObject),
 		entryArrays:  make(map[uint64]graphEntryArray),
 		counts:       make(map[uint8]uint64),
+	}
+	if strict != nil {
+		v.spans = nil
 	}
 	if err := v.readHeader(); err != nil {
 		return err
@@ -86,6 +103,9 @@ func verifyObjectGraph(source verifyByteSource) error {
 	}
 	if err := v.validateTailMetadata(); err != nil {
 		return err
+	}
+	if strict != nil {
+		return v.validateIndex()
 	}
 	if err := v.validateGlobalEntryArray(); err != nil {
 		return err
@@ -129,6 +149,11 @@ func (v *graphVerifier) validateHeader() error {
 }
 
 func (v *graphVerifier) validateHeaderBounds() error {
+	if v.strict != nil {
+		var err error
+		v.arenaEnd, err = v.header.validateDeclaredArena(v.source.Len())
+		return err
+	}
 	if v.header.headerSize > v.source.Len() {
 		return fmt.Errorf("header_size %d exceeds file size", v.header.headerSize)
 	}
@@ -204,6 +229,11 @@ func (v *graphVerifier) readGraphObject(offset uint64, tail uint64) (objectHeade
 	if offset > v.source.Len()-objectHeaderSize {
 		return objectHeader{}, 0, fmt.Errorf("object header at offset %d exceeds file bounds", offset)
 	}
+	if v.strict != nil {
+		if err := v.header.validateArenaObject(offset, objectHeaderSize, v.arenaEnd); err != nil {
+			return objectHeader{}, 0, err
+		}
+	}
 	typ, err := verifySourceByte(v.source, offset)
 	if err != nil {
 		return objectHeader{}, 0, err
@@ -247,6 +277,11 @@ func (v *graphVerifier) validateGraphObject(offset uint64, obj objectHeader, ali
 	if offset%objectAlignment != 0 {
 		return fmt.Errorf("object offset %d is not aligned", offset)
 	}
+	if v.strict != nil {
+		if err := v.header.validateArenaObject(offset, obj.size, v.arenaEnd); err != nil {
+			return err
+		}
+	}
 	return v.validateGraphObjectFlags(offset, obj)
 }
 
@@ -278,7 +313,9 @@ func (v *graphVerifier) validateGraphCompressionFlag(offset uint64, flags uint8)
 }
 
 func (v *graphVerifier) recordObject(offset uint64, obj objectHeader) {
-	v.spans[offset] = obj
+	if v.spans != nil {
+		v.spans[offset] = obj
+	}
 	v.order = append(v.order, offset)
 	v.counts[obj.typ]++
 }
@@ -418,6 +455,16 @@ func (v *graphVerifier) parseData(offset uint64, obj objectHeader) error {
 	if err := v.validateDataObject(offset, data); err != nil {
 		return err
 	}
+	if v.strict != nil {
+		eq := bytes.IndexByte(hashPayload, '=')
+		if eq <= 0 {
+			return fmt.Errorf("DATA %d has no field name", offset)
+		}
+		data.fieldName = v.strict.internName(hashPayload[:eq])
+		if err := v.indexUniqueData(offset, hashPayload); err != nil {
+			return err
+		}
+	}
 	v.dataObjects[offset] = data
 	return nil
 }
@@ -486,16 +533,16 @@ func (v *graphVerifier) readGraphDataObject(offset uint64, storedHash uint64) (g
 }
 
 func (v *graphVerifier) validateDataObject(offset uint64, data graphDataObject) error {
-	if err := v.validOffset(data.nextHashOffset, fmt.Sprintf("DATA %d next_hash_offset", offset)); err != nil {
+	if err := v.validOffsetFrom(data.nextHashOffset, offset, "DATA", "next_hash_offset"); err != nil {
 		return err
 	}
-	if err := v.validOffset(data.nextFieldOffset, fmt.Sprintf("DATA %d next_field_offset", offset)); err != nil {
+	if err := v.validOffsetFrom(data.nextFieldOffset, offset, "DATA", "next_field_offset"); err != nil {
 		return err
 	}
-	if err := v.validOffset(data.entryOffset, fmt.Sprintf("DATA %d entry_offset", offset)); err != nil {
+	if err := v.validOffsetFrom(data.entryOffset, offset, "DATA", "entry_offset"); err != nil {
 		return err
 	}
-	if err := v.validOffset(data.entryArrayOffset, fmt.Sprintf("DATA %d entry_array_offset", offset)); err != nil {
+	if err := v.validOffsetFrom(data.entryArrayOffset, offset, "DATA", "entry_array_offset"); err != nil {
 		return err
 	}
 	if data.nEntries < 2 && data.entryArrayOffset != 0 {
@@ -530,13 +577,17 @@ func (v *graphVerifier) parseField(offset uint64, obj objectHeader) error {
 	if err != nil {
 		return err
 	}
-	if err := v.validOffset(nextHashOffset, fmt.Sprintf("FIELD %d next_hash_offset", offset)); err != nil {
+	if err := v.validOffsetFrom(nextHashOffset, offset, "FIELD", "next_hash_offset"); err != nil {
 		return err
 	}
-	if err := v.validOffset(headDataOffset, fmt.Sprintf("FIELD %d head_data_offset", offset)); err != nil {
+	if err := v.validOffsetFrom(headDataOffset, offset, "FIELD", "head_data_offset"); err != nil {
 		return err
 	}
-	v.fieldObjects[offset] = struct{}{}
+	field := graphFieldObject{hash: storedHash, nextHashOffset: nextHashOffset, headDataOffset: headDataOffset}
+	if v.strict != nil {
+		field.name = v.strict.internName(payload)
+	}
+	v.fieldObjects[offset] = field
 	return nil
 }
 
@@ -617,7 +668,7 @@ func (v *graphVerifier) readEntryItems(offset, size, itemSize uint64) ([]uint64,
 		if item == 0 {
 			return nil, fmt.Errorf("ENTRY object at offset %d has zero item", offset)
 		}
-		if err := v.validOffset(item, fmt.Sprintf("ENTRY %d item", offset)); err != nil {
+		if err := v.validOffsetFrom(item, offset, "ENTRY", "item"); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -691,14 +742,15 @@ func (v *graphVerifier) parseEntryArray(offset uint64, obj objectHeader) error {
 		return fmt.Errorf("ENTRY_ARRAY object at offset %d has unaligned items", offset)
 	}
 	array := graphEntryArray{
-		next: 0,
+		items: make([]uint64, 0, (obj.size-offsetArrayObjectHeaderSize)/itemSize),
+		next:  0,
 	}
 	next, err := verifySourceU64(v.source, offset+16)
 	if err != nil {
 		return err
 	}
 	array.next = next
-	if err := v.validOffset(array.next, fmt.Sprintf("ENTRY_ARRAY %d next", offset)); err != nil {
+	if err := v.validOffsetFrom(array.next, offset, "ENTRY_ARRAY", "next"); err != nil {
 		return err
 	}
 	for itemOffset := offset + offsetArrayObjectHeaderSize; itemOffset < offset+obj.size; itemOffset += itemSize {
@@ -717,7 +769,7 @@ func (v *graphVerifier) parseEntryArray(offset uint64, obj objectHeader) error {
 			item = value
 		}
 		if item != 0 {
-			if err := v.validOffset(item, fmt.Sprintf("ENTRY_ARRAY %d item", offset)); err != nil {
+			if err := v.validOffsetFrom(item, offset, "ENTRY_ARRAY", "item"); err != nil {
 				return err
 			}
 		}
@@ -775,9 +827,15 @@ func (v *graphVerifier) validateTailMetadata() error {
 		if v.header.nEntries != 0 {
 			return fmt.Errorf("entries recorded but no ENTRY objects found")
 		}
+		if v.strict != nil {
+			return v.header.validateEmptyEntryMetadata()
+		}
 		return nil
 	}
-	headOffset, tailOffset, head, tail := v.headTailEntries()
+	headOffset, tailOffset, head, tail, err := v.headTailEntries()
+	if err != nil {
+		return err
+	}
 	if err := v.validateHeadTailEntries(head, tail); err != nil {
 		return err
 	}
@@ -790,10 +848,15 @@ func (v *graphVerifier) validateTailMetadata() error {
 	return nil
 }
 
-func (v *graphVerifier) headTailEntries() (uint64, uint64, graphEntryObject, graphEntryObject) {
+func (v *graphVerifier) headTailEntries() (uint64, uint64, graphEntryObject, graphEntryObject, error) {
 	var headOffset, tailOffset uint64
 	var head, tail graphEntryObject
 	for offset, entry := range v.entryObjects {
+		if v.strict != nil {
+			if err := v.strict.ctx.Err(); err != nil {
+				return 0, 0, head, tail, err
+			}
+		}
 		if headOffset == 0 || entry.seqnum < head.seqnum {
 			headOffset = offset
 			head = entry
@@ -803,7 +866,7 @@ func (v *graphVerifier) headTailEntries() (uint64, uint64, graphEntryObject, gra
 			tail = entry
 		}
 	}
-	return headOffset, tailOffset, head, tail
+	return headOffset, tailOffset, head, tail, nil
 }
 
 func (v *graphVerifier) validateHeadTailEntries(head, tail graphEntryObject) error {
@@ -1114,4 +1177,12 @@ func decompressDataPayload(flags uint8, payload []byte) ([]byte, error) {
 	default:
 		return payload, nil
 	}
+}
+
+// Build object-specific diagnostic labels only when an offset is invalid.
+func (v *graphVerifier) validOffsetFrom(offset, owner uint64, kind, field string) error {
+	if err := v.validOffset(offset, field); err != nil {
+		return fmt.Errorf("%s %d: %w", kind, owner, err)
+	}
+	return nil
 }

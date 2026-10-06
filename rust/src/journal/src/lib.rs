@@ -5,6 +5,12 @@
 //! the imported implementation and adds byte-safe entries, directory reading,
 //! export/JSON formatting, and a libsystemd-style facade.
 
+mod indexed_snapshot;
+pub use indexed_snapshot::{
+    CapturedValue, IndexedSnapshot, IndexedSnapshotOptions, SnapshotControl, SnapshotEntry,
+    SnapshotMetadata,
+};
+
 mod directory;
 mod explorer;
 mod export;
@@ -24,7 +30,7 @@ pub use explorer::{
 };
 pub use export::{export_entry, export_entry_bytes, format_entry_text, json_entry};
 pub use parse::{ParseError, ParsedCursor, parse_cursor, parse_match_bytes, parse_match_string};
-pub use sealed_verify::{verify_file, verify_file_with_key};
+pub use sealed_verify::{verify_file, verify_file_with_key, verify_index};
 
 use ouroboros::self_referencing;
 use std::collections::HashMap;
@@ -77,6 +83,7 @@ pub enum SdkError {
     InvalidPath(String),
     InvalidCursor(String),
     NoEntry,
+    Cancelled,
     DecompressionFailed(String),
     Unsupported(&'static str),
     VerificationError(String),
@@ -88,6 +95,7 @@ impl fmt::Display for SdkError {
             Self::Journal(err) => write!(f, "{err}"),
             Self::InvalidPath(path) => write!(f, "invalid path: {path}"),
             Self::InvalidCursor(cursor) => write!(f, "invalid cursor: {cursor}"),
+            Self::Cancelled => write!(f, "operation cancelled"),
             Self::NoEntry => write!(f, "no entry at current position"),
             Self::DecompressionFailed(err) => write!(f, "decompression failed: {err}"),
             Self::Unsupported(op) => write!(f, "unsupported operation: {op}"),

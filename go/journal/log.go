@@ -213,9 +213,31 @@ type Log struct {
 	writer        *Writer
 	entriesInFile int
 	closed        bool
+	failure       error
 	openRetention bool
 	lastRealtime  uint64
 	lastMonotonic uint64
+}
+
+func (l *Log) writable() error {
+	if l.failure != nil {
+		return l.failure
+	}
+	if l.writer != nil && l.writer.failure != nil {
+		l.failure = l.writer.failure
+		return l.failure
+	}
+	if l.closed {
+		return errWriterClosed
+	}
+	return nil
+}
+
+func (l *Log) recordFailure(err error) error {
+	if errors.Is(err, ErrWriterFailed) && l.failure == nil {
+		l.failure = err
+	}
+	return err
 }
 
 type archivedJournalFile struct {
@@ -441,14 +463,19 @@ func (l *Log) archiveOnlineChainActive(path string) error {
 		return err
 	}
 	if w.header.nEntries == 0 {
-		closeErr := w.Close()
+		if err := w.Close(); err != nil {
+			return l.recordFailure(err)
+		}
 		removeErr := os.Remove(path)
 		if errors.Is(removeErr, os.ErrNotExist) {
 			removeErr = nil
 		}
-		return errors.Join(closeErr, removeErr)
+		return removeErr
 	}
-	return w.archiveTo(path, l.syncOnArchive)
+	if err := w.archiveTo(path, l.syncOnArchive); err != nil {
+		return l.recordFailure(errors.Join(err, w.Close()))
+	}
+	return nil
 }
 
 func replaceableActiveOpenError(err error) bool {
@@ -520,7 +547,9 @@ func (l *Log) attachOpenedWriter(w *Writer) {
 }
 
 func (l *Log) discardEmptyOpenedWriter(w *Writer) error {
-	closeErr := w.Close()
+	if err := w.Close(); err != nil {
+		return l.recordFailure(err)
+	}
 	removeErr := os.Remove(l.active)
 	if errors.Is(removeErr, os.ErrNotExist) {
 		removeErr = nil
@@ -528,14 +557,14 @@ func (l *Log) discardEmptyOpenedWriter(w *Writer) error {
 	if !l.strict {
 		l.active = ""
 	}
-	return errors.Join(closeErr, removeErr)
+	return removeErr
 }
 
 // Append appends one entry, rotating first if the current active file already
 // satisfies a configured rotation limit.
 func (l *Log) Append(fields []Field, opts EntryOptions) error {
-	if l.closed {
-		return errWriterClosed
+	if err := l.writable(); err != nil {
+		return err
 	}
 	if err := validateEntryFields(fields); err != nil {
 		return err
@@ -565,7 +594,7 @@ func (l *Log) Append(fields []Field, opts EntryOptions) error {
 	}
 	fields = appendLogMetadataFields(fields, l.entryBootIDForAppend(opts), opts.SourceRealtimeUsec)
 	if err := l.writer.Append(fields, opts); err != nil {
-		return err
+		return l.recordFailure(err)
 	}
 	l.captureAppendState()
 	return nil
@@ -575,8 +604,8 @@ func (l *Log) Append(fields []Field, opts EntryOptions) error {
 // the directory writer. The first '=' byte separates the field name from the
 // value; later '=' bytes and arbitrary value bytes are preserved.
 func (l *Log) AppendRaw(payloads [][]byte, opts EntryOptions) error {
-	if l.closed {
-		return errWriterClosed
+	if err := l.writable(); err != nil {
+		return err
 	}
 	preparedPayloads, err := prepareRawPayloadsForPolicy(payloads, l.fieldNamePolicy)
 	if err != nil {
@@ -603,7 +632,7 @@ func (l *Log) AppendRaw(payloads [][]byte, opts EntryOptions) error {
 	}
 	payloads = appendLogMetadataPayloads(payloads, l.entryBootIDForAppend(opts), opts.SourceRealtimeUsec)
 	if err := l.writer.AppendRaw(payloads, opts); err != nil {
-		return err
+		return l.recordFailure(err)
 	}
 	l.captureAppendState()
 	return nil
@@ -634,16 +663,18 @@ func (l *Log) AppendMapWithOptions(fields map[string]string, opts EntryOptions) 
 
 // Sync flushes the active journal file.
 func (l *Log) Sync() error {
-	if l.closed {
-		return errWriterClosed
+	if err := l.writable(); err != nil {
+		return err
 	}
 	if l.writer == nil {
 		return nil
 	}
-	return l.writer.Sync()
+	return l.recordFailure(l.writer.Sync())
 }
 
-// Close archives the active file and applies retention.
+// Close archives the active file and applies retention. After an uncertain
+// writer failure it only releases resources, preserving the file and skipping
+// retention. Subsequent Close calls return nil once resources are released.
 func (l *Log) Close() error {
 	return l.close(true)
 }
@@ -661,33 +692,44 @@ func (l *Log) close(enforceRetention bool) error {
 	if l.closed {
 		return nil
 	}
+	if err := l.writable(); err != nil {
+		var closeErr error
+		if l.writer != nil {
+			closeErr = l.writer.Close()
+			l.writer = nil
+		}
+		l.closed = true
+		return errors.Join(err, closeErr)
+	}
 	if l.writer == nil {
 		l.closed = true
 		return nil
 	}
 	if l.writer.header.nEntries == 0 && l.strict {
-		err1 := l.writer.Close()
-		err2 := os.Remove(l.activePath())
-		if errors.Is(err2, os.ErrNotExist) {
-			err2 = nil
+		if err := l.writer.Close(); err != nil {
+			l.writer = nil
+			l.closed = true
+			return l.recordFailure(err)
+		}
+		removeErr := os.Remove(l.activePath())
+		if errors.Is(removeErr, os.ErrNotExist) {
+			removeErr = nil
 		}
 		l.writer = nil
 		l.active = ""
-		if err := errors.Join(err1, err2); err != nil {
-			l.closed = true
-			return err
-		}
 		l.closed = true
-		return nil
+		return removeErr
 	}
 	protectedPath := l.activePath()
 	if l.strict {
 		protectedPath = l.archivePathFor(l.writer.header)
 	}
 	if _, err := l.archiveActive(); err != nil {
-		if l.writer == nil {
-			l.closed = true
+		if l.writer != nil {
+			err = errors.Join(err, l.writer.Close())
+			l.writer = nil
 		}
+		l.closed = true
 		return err
 	}
 	if enforceRetention {
@@ -740,6 +782,9 @@ func (l *Log) Source() string {
 }
 
 func (l *Log) ensureWriter(entryOpts EntryOptions, reason LogLifecycleReason) error {
+	if err := l.writable(); err != nil {
+		return err
+	}
 	if l.writer != nil {
 		return nil
 	}
@@ -759,7 +804,7 @@ func (l *Log) ensureWriter(entryOpts EntryOptions, reason LogLifecycleReason) er
 	}
 	w, err := Create(l.activePath(), opts)
 	if err != nil {
-		return err
+		return l.recordFailure(err)
 	}
 	l.writer = w
 	l.entriesInFile = 0
@@ -840,6 +885,7 @@ func (l *Log) archiveActive() (string, error) {
 		archivePath = l.archivePathFor(l.writer.header)
 	}
 	if err := l.writer.archiveTo(archivePath, l.syncOnArchive); err != nil {
+		l.recordFailure(err)
 		if l.writer.closed {
 			l.options.SeqnumID = seqnumID
 			l.options.BootID = bootID

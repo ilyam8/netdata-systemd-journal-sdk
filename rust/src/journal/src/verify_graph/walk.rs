@@ -97,6 +97,10 @@ impl<'a> GraphVerifier<'a> {
         if aligned_size == 0 || aligned_size > self.source.len() - offset {
             return Err(format!("object at offset {offset} exceeds file bounds"));
         }
+        let arena_end = self.header.header_size + self.header.arena_size;
+        if self.strict && (offset > arena_end || obj.size > arena_end - offset) {
+            return Err(format!("object at offset {offset} exceeds declared arena"));
+        }
         if offset % 8 != 0 {
             return Err(format!("object offset {offset} is not aligned"));
         }
@@ -327,6 +331,21 @@ impl<'a> GraphVerifier<'a> {
     pub(super) fn parse_data(&mut self, offset: u64, obj: ObjectHeader) -> Result<(), String> {
         let payload = self.data_payload(offset, obj)?;
         self.validate_data_hash(offset, payload.as_ref())?;
+        if self.strict {
+            let eq = payload
+                .iter()
+                .position(|b| *b == b'=')
+                .filter(|eq| *eq > 0)
+                .ok_or_else(|| "invalid DATA field name".to_string())?;
+            self.data_names.insert(offset, payload[..eq].to_vec());
+            use sha2::{Digest, Sha256};
+            let digest: [u8; 32] = Sha256::digest(&payload).into();
+            if let Some(previous) = self.data_digests.insert(digest, offset) {
+                if self.data_payload(previous, self.spans[&previous])? == payload {
+                    return Err("duplicate DATA payload".into());
+                }
+            }
+        }
         let data = self.read_data_object(offset)?;
         self.validate_data_object(offset, &data)?;
         self.data_objects.insert(offset, data);
@@ -514,6 +533,20 @@ impl<'a> GraphVerifier<'a> {
             offset + obj.size,
         )?;
         let stored_hash = u64_at_u64(self.source, offset + 16)?;
+        if self.strict {
+            if payload.is_empty() || payload.contains(&b'=') {
+                return Err("invalid FIELD name".into());
+            }
+            self.fields.insert(
+                offset,
+                (
+                    stored_hash,
+                    u64_at_u64(self.source, offset + 24)?,
+                    u64_at_u64(self.source, offset + 32)?,
+                    payload.clone(),
+                ),
+            );
+        }
         let computed_hash = self.hash(&payload);
         if stored_hash != computed_hash {
             return Err(format!(

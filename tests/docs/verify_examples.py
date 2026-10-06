@@ -84,6 +84,7 @@ FIXTURES_MARKER = "<FIXTURES>"
 SCRATCH_MARKER = "<SCRATCH>"
 
 GO_IMPORT_PREFIXES = (
+    ("context.", "context", "context"),
     ("journal.", "journal", "github.com/netdata/systemd-journal-sdk/go/journal"),
     ("fmt.", "fmt", "fmt"),
     ("bytes.", "bytes", "bytes"),

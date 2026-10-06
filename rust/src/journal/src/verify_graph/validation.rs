@@ -80,6 +80,7 @@ impl<'a> GraphVerifier<'a> {
         if self.header.n_entries != 0 {
             return Err("entries recorded but no ENTRY objects found".to_string());
         }
+        // Strict empty metadata uses the shared native-header check at entry.
         Ok(())
     }
 

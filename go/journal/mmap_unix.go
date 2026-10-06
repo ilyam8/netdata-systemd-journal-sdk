@@ -30,12 +30,19 @@ func newMappedArena(file *os.File, size uint64) (*mappedArena, error) {
 	return arena, nil
 }
 
+func checkArenaSize(size uint64) error {
+	if size > uint64(int(^uint(0)>>1)) {
+		return fmt.Errorf("%w: mapped arena too large", errInvalidJournal)
+	}
+	return nil
+}
+
 func (a *mappedArena) remap(size uint64) error {
 	if size == a.size && len(a.data) > 0 {
 		return nil
 	}
-	if size > uint64(int(^uint(0)>>1)) {
-		return fmt.Errorf("%w: mapped arena too large", errInvalidJournal)
+	if err := checkArenaSize(size); err != nil {
+		return err
 	}
 	if len(a.data) > 0 {
 		if err := syscall.Munmap(a.data); err != nil {
@@ -83,15 +90,6 @@ func (a *mappedArena) directBytesAt(offset, size uint64) ([]byte, bool, error) {
 
 func (a *mappedArena) readAt(dst []byte, offset uint64) error {
 	src, err := a.bytesAt(offset, uint64(len(dst)))
-	if err != nil {
-		return err
-	}
-	copy(dst, src)
-	return nil
-}
-
-func (a *mappedArena) writeAt(offset uint64, src []byte) error {
-	dst, err := a.bytesAt(offset, uint64(len(src)))
 	if err != nil {
 		return err
 	}

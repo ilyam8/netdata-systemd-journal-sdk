@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 mod hash;
 mod header;
 mod io;
+mod strict;
 mod validation;
 mod walk;
 
@@ -140,6 +141,10 @@ struct GraphVerifier<'a> {
     entry_arrays: HashMap<u64, EntryArray>,
     counts: [u64; 8],
     main_entry_array_found: bool,
+    strict: bool,
+    data_names: HashMap<u64, Vec<u8>>,
+    data_digests: HashMap<[u8; 32], u64>,
+    fields: HashMap<u64, (u64, u64, u64, Vec<u8>)>,
 }
 
 impl<'a> GraphVerifier<'a> {
@@ -155,6 +160,10 @@ impl<'a> GraphVerifier<'a> {
             entry_arrays: HashMap::new(),
             counts: [0; 8],
             main_entry_array_found: false,
+            strict: false,
+            data_names: HashMap::new(),
+            data_digests: HashMap::new(),
+            fields: HashMap::new(),
         }
     }
 
@@ -164,6 +173,9 @@ impl<'a> GraphVerifier<'a> {
         self.validate_header_counts()?;
         self.validate_main_entry_array_presence()?;
         self.validate_tail_metadata()?;
+        if self.strict {
+            return self.validate_strict_indexes();
+        }
         self.validate_global_entry_array()?;
         self.validate_data_hash_table()
     }
@@ -199,4 +211,16 @@ impl Header {
             tail_entry_offset: 0,
         }
     }
+}
+
+pub(super) fn verify_index_source(
+    source: &dyn VerifyByteSource,
+    header: &journal_core::file::JournalHeader,
+) -> Result<(), String> {
+    header
+        .validate_empty_entry_metadata()
+        .map_err(|err| err.to_string())?;
+    let mut verifier = GraphVerifier::new(source);
+    verifier.strict = true;
+    verifier.verify()
 }

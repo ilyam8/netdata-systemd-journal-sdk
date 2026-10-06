@@ -1083,3 +1083,46 @@ The only write exception outside the repository is `/tmp`. Prefer `.local/` insi
 ## Open Questions
 
 None currently blocking bootstrap. Implementation-phase SOWs may expose narrower decisions and must record them before coding starts.
+
+## Indexed Snapshot And Recovery Contract
+
+Go and Rust MUST provide the additive IndexedSnapshot surface documented in
+`docs/Indexed-Snapshots.md`. Capture freezes committed population bounds, declared
+FIELD heads and exact-value counts under caller-owned writer exclusion.
+Go IsArchived and Rust is_archived MUST read the owned captured header state,
+returning true only for archived state. Later archival MUST NOT change that
+result. This metadata alone MUST NOT be treated as integrity certification.
+Traversal MUST use native indexes without eager O(entries) offset lists. Go uses
+bounded chunks; Rust retains offsets for one ENTRY, so scratch grows with entry
+width rather than file entry count. Selected compressed payloads require decoding
+space. Go guards expired payload visitation, not reads of exported metadata fields;
+FIELD predicates expose posting multiplicity rather than implicit union semantics.
+Callbacks MUST honor borrowed payload lifetimes and cooperative cancellation.
+Historical/layout/compression support is shared with existing readers.
+
+Strict VerifyIndex/verify_index MUST certify full bidirectional native index
+membership before uncertain files are reused; the compatibility verifier remains
+separate. This offline check has graph-sized time and memory, not query-open cost.
+Strict verification MUST bound every committed object by the declared arena,
+not just physical preallocation. Snapshot capture and append-open MUST reject
+declared extents that exclude their required objects before variable index
+mapping or writer mutation. Empty populations MAY inherit tail sequence state;
+current-file entry pointers, head sequence and timestamps MUST be empty. Tail
+boot metadata MUST follow historical header field presence and compatible flags.
+These shared header checks MUST NOT turn compatibility readers into full graph
+certifiers or reject the historical damaged-tail fixtures they already support. Ordinary live readers MUST permit declared capacity to exceed physical size
+during normal append preparation while validating header arithmetic and the
+physical bounds of every mapped or accessed region. Stable-file integrity checks
+MUST remain owned by writer-excluded capture, strict verification and append-open,
+not unconditionally applied at ordinary reader open.
+Rejected append-open validation MUST leave file bytes and extent unchanged.
+Writable reuse and sync MUST preserve existing/published allocation, including
+final-object alignment padding. Temporary growth caused only by mapping windows
+MAY be trimmed back to that retained allocation. Resumed appends MUST use the
+aligned end of the last object.
+Errors after the first possible file or publication-state mutation MUST poison
+writers. Cleanup MUST preserve uncertain files without
+clean-state publication, archival retries, empty-file deletion or retention.
+Validation and capacity errors proven to precede mutation MUST leave writers
+reusable. Open itself MUST NOT silently
+incur a full strict verification pass. Applications own recovery/provenance policy.

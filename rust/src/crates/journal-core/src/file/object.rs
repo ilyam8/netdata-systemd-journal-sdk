@@ -111,6 +111,93 @@ pub struct JournalHeader {
 }
 
 impl JournalHeader {
+    fn declared_arena_end(&self) -> Result<u64> {
+        if self.header_size < 208 || self.header_size % 8 != 0 {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        self.header_size
+            .checked_add(self.arena_size)
+            .ok_or(JournalError::ObjectExceedsFileBounds)
+    }
+
+    /// Bounds mappings without requiring a live writer's future allocation to exist.
+    pub(super) fn validate_reader_mappings(&self, file_size: u64) -> Result<()> {
+        let end = self.declared_arena_end()?.min(file_size);
+        if self.header_size > end {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        for (offset, size) in [
+            (self.data_hash_table_offset, self.data_hash_table_size),
+            (self.field_hash_table_offset, self.field_hash_table_size),
+        ] {
+            match (offset, size) {
+                (None, None) => {}
+                (Some(offset), Some(size)) => {
+                    let offset = offset.get();
+                    let size = size.get();
+                    if offset < self.header_size
+                        || offset - self.header_size < 16
+                        || offset % 8 != 0
+                        || size < 16
+                        || size % 16 != 0
+                        || offset > end
+                        || size > end - offset
+                    {
+                        return Err(JournalError::ObjectExceedsFileBounds);
+                    }
+                }
+                _ => return Err(JournalError::InvalidObjectLocation),
+            }
+        }
+        Ok(())
+    }
+
+    /// Validates stable declared extents for writer-excluded capture and recovery.
+    #[doc(hidden)]
+    pub fn validated_arena_end(&self, file_size: u64) -> Result<u64> {
+        self.validate_reader_mappings(file_size)?;
+        let end = self.declared_arena_end()?;
+        if end > file_size {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        let tail = self.tail_object_offset.map_or(0, NonZeroU64::get);
+        if tail != 0 && (tail < self.header_size || tail % 8 != 0 || tail > end || end - tail < 16)
+        {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        for offset in [self.data_hash_table_offset, self.field_hash_table_offset]
+            .into_iter()
+            .flatten()
+        {
+            if offset.get() - 16 > tail {
+                return Err(JournalError::ObjectExceedsFileBounds);
+            }
+        }
+        Ok(end)
+    }
+
+    /// Empty files may inherit a sequence counter, but not per-file ENTRY state.
+    #[doc(hidden)]
+    pub fn validate_empty_entry_metadata(&self) -> Result<()> {
+        if self.n_entries != 0 {
+            return Ok(());
+        }
+        if self.head_entry_seqnum != 0
+            || self.entry_array_offset.is_some()
+            || self.head_entry_realtime != 0
+            || self.tail_entry_realtime != 0
+            || self.tail_entry_monotonic != 0
+            || (self.header_size >= 264
+                && (self.tail_entry_array_offset != 0 || self.tail_entry_array_n_entries != 0))
+            || (self.header_size >= 272 && self.tail_entry_offset != 0)
+            || (self.header_size >= 272
+                && self.has_compatible_flag(HeaderCompatibleFlags::TailEntryBootId)
+                && self.tail_entry_boot_id != [0; 16])
+        {
+            return Err(JournalError::InvalidObjectLocation);
+        }
+        Ok(())
+    }
     pub fn has_incompatible_flag(&self, flag: HeaderIncompatibleFlags) -> bool {
         (self.incompatible_flags & flag as u32) != 0
     }
@@ -718,6 +805,17 @@ impl<B: SplitByteSliceMut> JournalObjectMut<B> for DataObject<B> {
 }
 
 impl<B: ByteSlice> DataObject<B> {
+    #[doc(hidden)]
+    pub fn tail_entry_array_hint(&self) -> Option<(u32, u32)> {
+        match &self.payload {
+            DataPayloadType::Compact { compact_fields, .. } => Some((
+                compact_fields.tail_entry_array_offset,
+                compact_fields.tail_entry_array_n_entries,
+            )),
+            DataPayloadType::Regular(_) => None,
+        }
+    }
+
     pub fn raw_payload(&self) -> &[u8] {
         match &self.payload {
             DataPayloadType::Regular(payload) => payload,

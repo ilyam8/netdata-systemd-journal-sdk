@@ -14,6 +14,32 @@ pub use memmap2::{Mmap, MmapMut, MmapOptions};
 
 const PAGE_SIZE: u64 = 4096;
 
+pub(super) fn read_file_exact_at(file: &File, position: u64, output: &mut [u8]) -> Result<()> {
+    #[cfg(unix)]
+    {
+        let mut read = 0usize;
+        while read < output.len() {
+            let bytes_read = file.read_at(&mut output[read..], position + read as u64)?;
+            if bytes_read == 0 {
+                return Err(JournalError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "short journal file read",
+                )));
+            }
+            read += bytes_read;
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let mut file = file;
+        file.seek(SeekFrom::Start(position))?;
+        file.read_exact(output)?;
+    }
+
+    Ok(())
+}
+
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ExperimentalMmapStrategy {
@@ -187,6 +213,8 @@ impl<M: MemoryMapMut> Window<M> {
 pub struct WindowManager<M: MemoryMap> {
     file: File,
     file_size: u64,
+    // Preserve existing/published allocation while trimming temporary mmap growth.
+    retained_size: u64,
     bounds_mode: BoundsMode,
     strategy: ExperimentalMmapStrategy,
     chunk_size: u64,
@@ -287,6 +315,7 @@ impl<M: MemoryMap> WindowManager<M> {
         Ok(WindowManager {
             file,
             file_size,
+            retained_size: file_size,
             bounds_mode,
             strategy,
             chunk_size,
@@ -348,30 +377,7 @@ impl<M: MemoryMap> WindowManager<M> {
             .ok_or(JournalError::ObjectExceedsFileBounds)?;
         self.ensure_cached_file_contains(end)?;
 
-        #[cfg(unix)]
-        {
-            let mut read = 0usize;
-            while read < output.len() {
-                let bytes_read = self
-                    .file
-                    .read_at(&mut output[read..], position + read as u64)?;
-                if bytes_read == 0 {
-                    return Err(JournalError::Io(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "short journal file read",
-                    )));
-                }
-                read += bytes_read;
-            }
-        }
-
-        #[cfg(not(unix))]
-        {
-            self.file.seek(SeekFrom::Start(position))?;
-            self.file.read_exact(output)?;
-        }
-
-        Ok(())
+        read_file_exact_at(&self.file, position, output)
     }
 
     fn get_chunk_aligned_start(&self, position: u64) -> u64 {
@@ -773,6 +779,7 @@ impl<M: MemoryMapMut> WindowManager<M> {
 
     /// Syncs all file data to disk
     pub fn sync(&mut self, logical_size: u64, header_bytes: &[u8]) -> Result<()> {
+        let logical_size = logical_size.max(self.retained_size);
         for window in &self.windows {
             window.mmap.flush()?;
         }
@@ -797,12 +804,14 @@ impl<M: MemoryMapMut> WindowManager<M> {
         }
         self.file.sync_data()?;
         self.file_size = logical_size;
+        self.retained_size = logical_size;
         Ok(())
     }
 
     /// Publish mmap writes to stock follow readers by triggering an inotify
     /// event with the same-size truncate used by systemd.
     pub fn post_change(&mut self, logical_size: u64) -> Result<()> {
+        let logical_size = logical_size.max(self.retained_size);
         fence(Ordering::SeqCst);
         if logical_size < self.file_size {
             self.windows.clear();
@@ -812,6 +821,7 @@ impl<M: MemoryMapMut> WindowManager<M> {
         }
         self.file.set_len(logical_size)?;
         self.file_size = logical_size;
+        self.retained_size = logical_size;
         Ok(())
     }
 }
@@ -1253,6 +1263,41 @@ mod tests {
         assert_eq!(stats.current_mapped_bytes, PAGE_SIZE_TEST * 2);
         assert_eq!(stats.max_mapped_bytes, PAGE_SIZE_TEST * 2);
         assert_eq!(stats.remap_count, 1);
+    }
+
+    #[test]
+    fn publication_preserves_retained_allocation_and_trims_only_window_growth() {
+        for strategy in [
+            ExperimentalMmapStrategy::Windowed,
+            ExperimentalMmapStrategy::WholeFile,
+        ] {
+            for sync in [false, true] {
+                let temp_file = NamedTempFile::new().unwrap();
+                temp_file.as_file().set_len(PAGE_SIZE_TEST * 2).unwrap();
+                let file = temp_file.reopen().unwrap();
+                let mut wm: WindowManager<MmapMut> = WindowManager::new_writer_owned_with_strategy(
+                    file,
+                    PAGE_SIZE_TEST * 4,
+                    32,
+                    strategy,
+                )
+                .unwrap();
+                for (requested, expected) in [(1, 2), (3, 3), (1, 3)] {
+                    wm.get_slice_mut(0, 16).unwrap().copy_from_slice(&[7; 16]);
+                    assert_eq!(wm.stats().file_size, PAGE_SIZE_TEST * 4);
+                    if sync {
+                        wm.sync(PAGE_SIZE_TEST * requested, &[]).unwrap();
+                    } else {
+                        wm.post_change(PAGE_SIZE_TEST * requested).unwrap();
+                    }
+                    assert_eq!(
+                        temp_file.as_file().metadata().unwrap().len(),
+                        PAGE_SIZE_TEST * expected
+                    );
+                    assert_eq!(wm.stats().window_count, 0);
+                }
+            }
+        }
     }
 
     #[test]

@@ -618,12 +618,17 @@ impl<M: MemoryMap> JournalFile<M> {
         // Create a memory map for the header
         let header_size = std::mem::size_of::<JournalHeader>() as u64;
         let header_map = M::create(&fd, 0, header_size)?;
-        let header = JournalHeader::ref_from_prefix(&header_map).unwrap().0;
+        // Capture header fields before measuring the backing file. Live growth may
+        // announce a larger arena before extending it; bound actual mappings here.
+        let header = *JournalHeader::ref_from_prefix(&header_map).unwrap().0;
+        let file_size = fd.metadata()?.len();
         if header.signature != *b"LPKSHHRH" {
             return Err(JournalError::InvalidMagicNumber);
         }
         let sanitized_header =
-            (header.header_size < header_size).then(|| sanitize_header_for_size(*header));
+            (header.header_size < header_size).then(|| sanitize_header_for_size(header));
+
+        header.validate_reader_mappings(file_size)?;
 
         // Initialize the hash table maps if they exist
         let data_hash_table_map = map_hash_table(
@@ -642,7 +647,7 @@ impl<M: MemoryMap> JournalFile<M> {
         // Create window manager for the rest of the objects
         let window_manager = GuardedCell::new(window_manager_builder(fd)?);
 
-        Ok(JournalFile {
+        let journal = JournalFile {
             file,
             header_map,
             sanitized_header,
@@ -650,7 +655,36 @@ impl<M: MemoryMap> JournalFile<M> {
             field_hash_table_map,
             window_manager,
             seal_options: None,
-        })
+        };
+        Ok(journal)
+    }
+
+    /// Bounded layout check; this does not certify the complete object graph.
+    #[doc(hidden)]
+    pub fn validate_committed_arena(&self) -> Result<()> {
+        Self::validate_committed_arena_header(
+            self.journal_header_ref(),
+            self.reader_file_size()?,
+            |offset, bytes| self.read_fresh_bytes_at(offset, bytes),
+        )
+    }
+
+    pub(super) fn validate_committed_arena_header(
+        header: &JournalHeader,
+        file_size: u64,
+        read: impl FnOnce(u64, &mut [u8]) -> Result<()>,
+    ) -> Result<()> {
+        let end = header.validated_arena_end(file_size)?;
+        if let Some(tail) = header.tail_object_offset {
+            let mut bytes = [0u8; std::mem::size_of::<ObjectHeader>()];
+            read(tail.get(), &mut bytes)?;
+            let object = ObjectHeader::read_from_prefix(&bytes).unwrap().0;
+            let size = object.validated_size()?;
+            if size > end - tail.get() {
+                return Err(JournalError::ObjectExceedsFileBounds);
+            }
+        }
+        Ok(())
     }
 
     pub fn file(&self) -> &crate::repository::File {
@@ -757,6 +791,14 @@ impl<M: MemoryMap> JournalFile<M> {
         let window_manager = self.window_manager.borrow_mut_checked()?;
         let src = window_manager.get_slice(offset, size)?;
         Ok(src.to_vec())
+    }
+
+    /// Reads through the backing file, bypassing mapped or copied windows.
+    #[doc(hidden)]
+    pub fn read_fresh_bytes_at(&self, offset: u64, output: &mut [u8]) -> Result<()> {
+        self.window_manager
+            .borrow_mut_checked()?
+            .read_exact_at(offset, output)
     }
 
     #[doc(hidden)]

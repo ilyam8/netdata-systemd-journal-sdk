@@ -5,6 +5,7 @@
 - [[Go-API|Go API]]
 - [[Rust-Crates-And-Packages|Rust Crates And Packages]]
 - [[Reader-APIs|Reader APIs]]
+- [[Indexed-Snapshots|Indexed Snapshots]]
 - [[Writer-APIs|Writer APIs]]
 - [[Explorer-And-Netdata-Queries|Explorer And Netdata Queries]]
 - [[Journalctl-CLI|Journalctl CLI]]
