@@ -75,6 +75,12 @@ committed graph; append-open uses bounded header/tail checks and does not silent
 perform a full graph scan. Applications still own strict recovery checks for
 uncertain files.
 
+Independent review extended H01's allocation finding to Rust sync/publication and
+rejected small-file opens. Rust now retains initial/published allocation while
+trimming temporary mapping growth, resumes appends at the aligned tail end, and
+validates original header/tail bytes before writable mappings can change a file.
+Committed regressions cover successful reuse and exact bytes on rejection.
+
 The shared regular/compact byte fixtures distinguish stock compatibility from
 safe SDK reuse. Stock 257.13 accepts an isolated empty head sequence and a declared
 arena ending inside the final object's payload, although the SDK recovery paths

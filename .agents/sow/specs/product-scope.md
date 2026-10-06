@@ -1111,6 +1111,11 @@ current-file entry pointers, head sequence and timestamps MUST be empty. Tail
 boot metadata MUST follow historical header field presence and compatible flags.
 These shared header checks MUST NOT turn compatibility readers into full graph
 certifiers or reject the historical damaged-tail fixtures they already support.
+Rejected append-open validation MUST leave file bytes and extent unchanged.
+Writable reuse and sync MUST preserve existing/published allocation, including
+final-object alignment padding. Temporary growth caused only by mapping windows
+MAY be trimmed back to that retained allocation. Resumed appends MUST use the
+aligned end of the last object.
 Errors after the first possible file or publication-state mutation MUST poison
 writers. Cleanup MUST preserve uncertain files without
 clean-state publication, archival retries, empty-file deletion or retention.

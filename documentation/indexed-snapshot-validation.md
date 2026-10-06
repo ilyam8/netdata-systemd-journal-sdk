@@ -318,8 +318,8 @@ regular, compact, all supported compression combinations and sealing; 100 entrie
 per writer at 10 ms intervals; two polling readers each for stock/Go/Rust and one
 libsystemd reader. Final ordered reads, structure and keyed verification pass.
 The closed-file positive/corrupt verification matrix passes 63/63. Rust public,
-core and directory-writer library suites pass 161/83/9. The final public rerun
-includes the unaligned-tail regression. These are bounded integration runs, not
+core and directory-writer library suites pass 167/84/9 after the independent-review
+corrections below. These are bounded integration runs, not
 long-duration stress or a v260.1 runtime claim.
 
 Go's additional reopen regression reproduced a valid compact final ENTRY losing
@@ -334,9 +334,30 @@ header invariants, snapshots, strict verification and writer reuse pass (12.8 s)
 Production cross-builds pass for linux/386 and windows/amd64; these are build
 results, not runtime tests of those platforms.
 
+Independent review of 4fcb79d reproduced the same allocation class in Rust:
+syncing a valid compact file removed four final alignment bytes, and rejecting
+an invalid small file grew it from 2,088 to 4,096 bytes during writable-window
+validation. Rust now validates original fixed header/tail bytes using positional
+reads before writable mapping. The existing WindowManager retains initial and
+published allocation separately from temporary mapping growth; sync/publication
+preserve the former while still trimming the latter. A real append exposed the
+related unaligned resumed offset, now computed from the aligned tail size with
+checked addition.
+
+Six new public regressions cover regular/compact layouts, both mapping strategies,
+reopen and existing mutable files, sync/post-change, later append, short headers
+and tight tail bounds. They failed before correction and now pass; a core control
+also preserves intentional trimming of temporary windows. Indexed tests pass
+33/33. The complete Linux suites and the 18-case live matrix were rerun after
+these changes with the counts and settings above.
+
 All 33 marked Go/Rust wiki examples pass, and the 16-page wiki structure check
 passes. No example or dependency version was changed. Earlier platform and
-consumer results above remain prior evidence, not new runs in this round.
+performance results above remain prior evidence unless explicitly rerun below.
+The current DEM journal, RUM-history and synthetic-history suites also pass with
+the corrected SDK through the existing local workspace override. The explicit
+macOS identity-helper read is permitted for the RUM test. Consumer source is
+unchanged.
 
 Six alternating before/after capture trials against pre-correction 0ae1ac4 show
 Go median 31.19 to 31.28 microseconds (100k-row benchmark, unchanged 12,344 bytes
@@ -345,3 +366,12 @@ default captures per trial of the same 30k-row synthetic file. Both ranges
 overlap; these small differences do not demonstrate a regression. The workloads
 differ, so the numbers are not a language comparison. No new per-entry decode,
 scan or allocation was introduced; the earlier traversal profiles remain valid.
+
+The Rust allocation/publication correction was also checked with six alternating
+30k-row writer pairs against 0ae1ac4: median append time 205.7 ms before and
+204.3 ms after (overlapping ranges, no measurable regression). Both use the same
+mixed 32-field structured workload, compact layout, windowed mapping and
+publication on every entry; generation, creation, close and verification are
+outside the timer. Reproduce with the release writer_core_bench using
+`--rows 30000 --api-mode structured-field --mmap-strategy windowed
+--live-publish-every-entries 1` and distinct synthetic output files.

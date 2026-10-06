@@ -10,6 +10,19 @@ fn fixture(
     JournalFile<MmapMut>,
     JournalWriter,
 ) {
+    fixture_with_strategy(compact, compression, ExperimentalMmapStrategy::Windowed)
+}
+
+fn fixture_with_strategy(
+    compact: bool,
+    compression: Compression,
+    strategy: ExperimentalMmapStrategy,
+) -> (
+    tempfile::TempDir,
+    PathBuf,
+    JournalFile<MmapMut>,
+    JournalWriter,
+) {
     let dir = tempfile::tempdir().unwrap();
     let parent = dir.path().join("01010101010101010101010101010101");
     std::fs::create_dir(&parent).unwrap();
@@ -19,6 +32,7 @@ fn fixture(
         &file,
         JournalFileOptions::new(test_uuid(1), test_uuid(2), test_uuid(3))
             .with_compact(compact)
+            .with_experimental_mmap_strategy(strategy)
             .with_compression(compression)
             .with_compress_threshold(8),
     )
@@ -865,4 +879,134 @@ fn compact_final_object_padding_may_lie_outside_declared_arena() {
         })
         .unwrap();
     assert_eq!(rows, 3);
+}
+
+fn reuse_preserves_physical_allocation(reopen: bool, sync: bool) {
+    for strategy in [
+        ExperimentalMmapStrategy::Windowed,
+        ExperimentalMmapStrategy::WholeFile,
+    ] {
+        for compact in [false, true] {
+            let (_dir, path, mut journal, mut writer) =
+                fixture_with_strategy(compact, Compression::None, strategy);
+            for index in 1..=3 {
+                append(&mut journal, &mut writer, index);
+            }
+            let tail = journal.journal_header_ref().tail_object_offset.unwrap();
+            let raw_end = tail.get() + journal.object_header_ref(tail).unwrap().size;
+            let physical_size = std::fs::metadata(&path).unwrap().len();
+            assert!(physical_size > raw_end);
+            if compact {
+                assert_ne!(raw_end % 8, 0);
+            }
+            let header = journal.journal_header_mut();
+            header.arena_size = raw_end - header.header_size;
+            drop(writer);
+            if reopen {
+                drop(journal);
+                journal = JournalFile::open_for_append(&RepoFile::from_path(&path).unwrap(), 4096)
+                    .unwrap();
+            }
+            let mut writer = JournalWriter::new(&mut journal, 4, test_uuid(2)).unwrap();
+            if sync {
+                journal.sync().unwrap();
+            } else {
+                journal.post_change().unwrap();
+            }
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().len(),
+                physical_size,
+                "compact={compact} reopen={reopen} sync={sync}"
+            );
+            verify_index(&path, &SnapshotControl::default()).unwrap();
+            append(&mut journal, &mut writer, 4);
+            journal.sync().unwrap();
+            assert_eq!(std::fs::metadata(&path).unwrap().len(), physical_size);
+            verify_index(&path, &SnapshotControl::default()).unwrap();
+            let snapshot = IndexedSnapshot::open(
+                &path,
+                IndexedSnapshotOptions::default(),
+                &SnapshotControl::default(),
+            )
+            .unwrap();
+            assert_eq!(snapshot.entry_count(), 4);
+        }
+    }
+}
+
+#[test]
+fn append_reopen_sync_preserves_physical_allocation() {
+    reuse_preserves_physical_allocation(true, true);
+}
+
+#[test]
+fn append_reopen_post_change_preserves_physical_allocation() {
+    reuse_preserves_physical_allocation(true, false);
+}
+
+#[test]
+fn existing_writer_sync_preserves_physical_allocation() {
+    reuse_preserves_physical_allocation(false, true);
+}
+
+#[test]
+fn existing_writer_post_change_preserves_physical_allocation() {
+    reuse_preserves_physical_allocation(false, false);
+}
+
+#[test]
+fn rejected_append_open_preserves_short_file_bytes() {
+    for compact in [false, true] {
+        for size in [8, 208, 271] {
+            let (_dir, path, journal, writer) = fixture(compact, Compression::None);
+            drop(writer);
+            drop(journal);
+            let mut bytes = std::fs::read(&path).unwrap();
+            bytes.truncate(size);
+            std::fs::write(&path, &bytes).unwrap();
+            assert!(
+                JournalFile::open_for_append(&RepoFile::from_path(&path).unwrap(), 4096).is_err()
+            );
+            assert_eq!(
+                std::fs::read(&path).unwrap(),
+                bytes,
+                "compact={compact} size={size}"
+            );
+        }
+    }
+}
+
+#[test]
+fn rejected_reuse_preserves_truncated_tail_bytes() {
+    for compact in [false, true] {
+        for reopen in [false, true] {
+            let (_dir, path, mut journal, mut writer) = fixture(compact, Compression::None);
+            for index in 1..=3 {
+                append(&mut journal, &mut writer, index);
+            }
+            let tail = journal
+                .journal_header_ref()
+                .tail_object_offset
+                .unwrap()
+                .get();
+            let header = journal.journal_header_mut();
+            header.arena_size = tail + 16 - header.header_size;
+            drop(writer);
+            journal.sync().unwrap();
+            let mut bytes = std::fs::read(&path).unwrap();
+            bytes.truncate((tail + 16) as usize);
+            std::fs::write(&path, &bytes).unwrap();
+            let file = RepoFile::from_path(&path).unwrap();
+            if reopen {
+                drop(journal);
+                assert!(JournalFile::open_for_append(&file, 4096).is_err());
+            } else {
+                assert!(JournalWriter::new(&mut journal, 4, test_uuid(2)).is_err());
+            }
+            assert!(
+                std::fs::read(&path).unwrap() == bytes,
+                "bytes changed compact={compact} reopen={reopen}"
+            );
+        }
+    }
 }

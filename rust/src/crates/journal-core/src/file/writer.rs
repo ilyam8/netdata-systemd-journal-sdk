@@ -386,7 +386,9 @@ impl JournalWriter {
 
             let tail_object = journal_file.object_header_ref(tail_object_offset)?;
 
-            tail_object_offset.saturating_add(tail_object.size)
+            tail_object_offset
+                .checked_add(tail_object.aligned_size())
+                .ok_or(JournalError::ObjectExceedsFileBounds)?
         };
 
         let seal = journal_file

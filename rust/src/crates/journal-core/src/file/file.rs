@@ -662,17 +662,24 @@ impl<M: MemoryMap> JournalFile<M> {
     /// Bounded layout check; this does not certify the complete object graph.
     #[doc(hidden)]
     pub fn validate_committed_arena(&self) -> Result<()> {
-        self.validate_committed_arena_header(self.journal_header_ref(), self.reader_file_size()?)
+        Self::validate_committed_arena_header(
+            self.journal_header_ref(),
+            self.reader_file_size()?,
+            |offset, bytes| self.read_fresh_bytes_at(offset, bytes),
+        )
     }
 
     pub(super) fn validate_committed_arena_header(
-        &self,
         header: &JournalHeader,
         file_size: u64,
+        read: impl FnOnce(u64, &mut [u8]) -> Result<()>,
     ) -> Result<()> {
         let end = header.validated_arena_end(file_size)?;
         if let Some(tail) = header.tail_object_offset {
-            let size = self.object_header_ref(tail)?.validated_size()?;
+            let mut bytes = [0u8; std::mem::size_of::<ObjectHeader>()];
+            read(tail.get(), &mut bytes)?;
+            let object = ObjectHeader::read_from_prefix(&bytes).unwrap().0;
+            let size = object.validated_size()?;
             if size > end - tail.get() {
                 return Err(JournalError::ObjectExceedsFileBounds);
             }

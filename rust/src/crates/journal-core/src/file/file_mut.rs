@@ -2,7 +2,7 @@ use super::file::{
     Compression, JOURNAL_COMPACT_SIZE_MAX, JournalFile, JournalFileOptions, OBJECT_ALIGNMENT,
     map_hash_table, round_up_to_file_size_increment, validate_offset_alignment,
 };
-use super::mmap::{MemoryMap, MemoryMapMut, WindowManager};
+use super::mmap::{MemoryMap, MemoryMapMut, WindowManager, read_file_exact_at};
 use super::object::*;
 use crate::error::{JournalError, Result};
 use crate::file::guarded_cell::GuardedCell;
@@ -40,9 +40,13 @@ impl JournalFile<super::mmap::MmapMut> {
             .open(file.path())?;
 
         let header_size = std::mem::size_of::<JournalHeader>() as u64;
-        let header_map = super::mmap::MmapMut::create(&fd, 0, header_size)?;
-        let header = *JournalHeader::ref_from_prefix(&header_map).unwrap().0;
         let file_size = fd.metadata()?.len();
+        if file_size < header_size {
+            return Err(JournalError::ObjectExceedsFileBounds);
+        }
+        let mut header_bytes = [0u8; std::mem::size_of::<JournalHeader>()];
+        read_file_exact_at(&fd, 0, &mut header_bytes)?;
+        let header = JournalHeader::read_from_prefix(&header_bytes).unwrap().0;
         if header.signature != *b"LPKSHHRH" {
             return Err(JournalError::InvalidMagicNumber);
         }
@@ -53,8 +57,11 @@ impl JournalFile<super::mmap::MmapMut> {
             return Err(JournalError::UnsupportedJournalFile);
         }
 
-        header.validated_arena_end(file_size)?;
         header.validate_empty_entry_metadata()?;
+        Self::validate_committed_arena_header(&header, file_size, |offset, bytes| {
+            read_file_exact_at(&fd, offset, bytes)
+        })?;
+        let header_map = super::mmap::MmapMut::create_checked(&fd, 0, header_size, file_size)?;
 
         let data_hash_table_map = map_hash_table(
             &fd,
@@ -81,7 +88,6 @@ impl JournalFile<super::mmap::MmapMut> {
             window_manager,
             seal_options: None,
         };
-        journal.validate_committed_arena_header(&header, file_size)?;
         Ok(journal)
     }
 }
