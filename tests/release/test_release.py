@@ -4,13 +4,12 @@ import hashlib
 import io
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
 import tarfile
 import tempfile
-import unittest
 import urllib.error
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 import release
 
@@ -64,7 +63,7 @@ def test_directory(prefix):
     return Path(tempfile.mkdtemp(prefix=prefix, dir=parent))
 
 
-class InputAndManifestTests(unittest.TestCase):
+class InputAndManifestTests(TestCase):
     def test_accepts_stable_version_and_immutable_source(self):
         release.validate_inputs(VERSION, SHA)
 
@@ -248,7 +247,7 @@ class InputAndManifestTests(unittest.TestCase):
             release.validate_install_examples(source, VERSION)
 
 
-class RegistryTests(unittest.TestCase):
+class RegistryTests(TestCase):
     def test_checks_archive_checksum_source_identity_and_dirty_flag(self):
         name = release.PACKAGES[0]
         valid = archive(name)
@@ -339,7 +338,7 @@ class RegistryTests(unittest.TestCase):
             registry.wait(release.PACKAGES[0], VERSION, SHA)
 
 
-class PublicationTests(unittest.TestCase):
+class PublicationTests(TestCase):
     def test_partial_batch_resumes_without_reuploading_verified_prefix(self):
         registry = MemoryRegistry()
         events = []
@@ -546,7 +545,7 @@ class PublicationTests(unittest.TestCase):
         self.assertFalse(summary.exists())
 
 
-class GitIntegrationTests(unittest.TestCase):
+class GitIntegrationTests(TestCase):
     def setUp(self):
         self.directory = test_directory("git-")
         self.remote = self.directory / "remote.git"
@@ -584,7 +583,8 @@ class GitIntegrationTests(unittest.TestCase):
             "core.hooksPath=/dev/null",
             *args,
         ]
-        result = subprocess.run(
+        # Actual Git behavior is required for these controlled local fixtures.
+        result = subprocess.run(  # nosec B603
             command, cwd=directory, check=True, text=True, capture_output=True
         )
         return result.stdout
@@ -814,4 +814,4 @@ class GitIntegrationTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

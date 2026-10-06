@@ -10,7 +10,7 @@ import json
 import os
 import re
 import shlex
-import subprocess
+import subprocess  # nosec B404
 import sys
 import tarfile
 import tempfile
@@ -52,7 +52,8 @@ def run(args, *, cwd, capture=False, env=None, timeout=900):
     command = shlex.join(str(arg) for arg in args)
     print(f"{cwd.name} > {command}", file=sys.stderr, flush=True)
     try:
-        result = subprocess.run(
+        # Callers supply fixed tool vectors and validated release arguments.
+        result = subprocess.run(  # nosec B603
             args,
             cwd=cwd,
             env=env,
@@ -200,7 +201,8 @@ def http_get(url, *, missing_ok=False, headers=None):
     request_headers.update(headers or {})
     try:
         request = urllib.request.Request(url, headers=request_headers)
-        with urllib.request.urlopen(request, timeout=30) as response:
+        # Callers construct fixed GitHub/crates.io HTTPS endpoints.
+        with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
             data = response.read(HTTP_LIMIT + 1)
     except urllib.error.HTTPError as error:
         if error.code == 404 and missing_ok:

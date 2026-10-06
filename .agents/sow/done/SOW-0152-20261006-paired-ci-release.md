@@ -396,13 +396,51 @@ Failure handling:
 - Clarified the operator retry text after review: a rejected atomic push
   changes neither remote tag, but another maintainer may have created correct
   tags. Re-check and preserve them; when local tags already match, retry only
-  the push command. No workflow/helper/test implementation changes follow the
-  review. Retained fresh lint receipts with commands, exit codes, timestamps
-  and input hashes in ignored scratch.
+  the push command. No workflow/helper/test implementation changes followed
+  the broad review before initial submission. Retained fresh lint receipts
+  with commands, exit codes, timestamps and input hashes in ignored scratch.
 - Fresh pre-close audit after review records and operator wording changes
   exits zero and reports SOW initialization complete and clean. Complete/move
   this implementation SOW with its code and ledger in the same public commit;
   require the independent closure-impact check before submission.
+- Submitted PR #7 with the signed implementation/completed-SOW commit.
+  The release-helper CI passed; ordinary PR execution correctly skipped
+  source publication jobs. A subsequent import-style comment is corrected
+  with one from-import for TestCase, main and mock. The suggested aliased
+  module import conflicted with Ruff PLR0402; direct imports satisfy both
+  checks. All four test-class bases and the script entry point retain the
+  same objects. Thirty-five tests, Ruff check/format and whitespace checks
+  pass again, with code-bound receipts retained in ignored scratch.
+- Reviewed all newly reported program/download hints: Bandit_B404 at the
+  subprocess imports in the helper and tests (alerts 3686/3689), Bandit_B603
+  at both program runners (3687/3690), and Bandit_B310 at the HTTP reader
+  (3688). These are explicitly dispositioned as intended operations with
+  restricted callers, not SDK runtime defects. Executables and argument
+  vectors are fixed Git/Cargo/Go or controlled test commands; no shell is
+  used, versions/commits are validated and crate names are constrained.
+  Tests operate on repository-owned fixtures. HTTP callers build URLs from
+  fixed HTTPS GitHub/crates.io hosts, the fixed repository/allowed crates and
+  validated versions; there is no caller-supplied URL or scheme CLI option.
+  The initial Codacy analysis gate failed on exactly these five findings.
+  Record five rule-specific inline dispositions after the call-site audit,
+  following tests/code_scanning/export_codacy_issues.py; no broad rule or
+  configuration suppression and no operational behavior change is needed.
+  The final three-file correction passes all 35 tests, Ruff check/format
+  and whitespace checks again. Fresh input hashes and logs are retained in
+  ignored scratch. Local Bandit is absent from the documented development
+  environment; the pushed CI run will validate the inline dispositions.
+  The post-submission SOW audit exits zero and reports complete and clean.
+- The optional GOPROXY=direct suggestion is rejected for the primary guide:
+  the default resolver exercises normal Go consumer availability. Canonical
+  tags and archive sources are checked separately, lookup has a bounded
+  wait, and the guide documents same-source retries after propagation lag.
+  No fallback feature or SDK repair is deferred by these comments.
+- The proposed direct-dependency/TOML expansion is rejected for the present
+  release surface: every active Rust installation example uses the checked
+  package/version inline-table form, and neither active scan directory has
+  a TOML file. Current examples all target 0.9.0. Additional syntax support
+  is an optional expansion when consumer examples actually introduce it;
+  no current stale-version finding or contract mismatch was demonstrated.
 
 ## Validation
 
