@@ -11,7 +11,7 @@ alias if existing code should import it as `journal`:
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.8.2" }
+journal = { package = "systemd-journal-sdk", version = "0.9.0" }
 ```
 
 The workspace also publishes project-prefixed lower-level packages for
@@ -525,12 +525,16 @@ cargo run --manifest-path rust/Cargo.toml -p journalctl -- \
   --file ./active.journal --follow --no-tail --boot=all
 ```
 
-## Unreleased indexed snapshots
+## Indexed snapshots
 
-The source tree adds bounded `IndexedSnapshot` traversal and strict offline index
+Rust `0.9.0` adds bounded `IndexedSnapshot` traversal and strict offline index
 verification for uncertain files. See [Indexed snapshots](../docs/Indexed-Snapshots.md)
 for API examples, caller exclusion, borrowed payloads and recovery costs. Failures
 after a possible file or publication-state mutation prevent further mutation and
 preserve uncertain files during cleanup. Validation and capacity failures known
-to precede mutation leave the writer reusable. These additions are not included
-in the previously published versions listed above.
+to precede mutation leave the writer reusable.
+
+Upgrading from Rust `0.8.x`: `0.9.0` adds the `SdkError::Cancelled` and
+`JournalError::WriterPoisoned` variants. Neither enum is `#[non_exhaustive]`,
+so code that matches every variant without a wildcard arm must handle the new
+variants.

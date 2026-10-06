@@ -7,7 +7,7 @@ Install the Go submodule:
 
 <!-- illustrative-only: registry install command -->
 ```sh
-go get github.com/netdata/systemd-journal-sdk/go@v0.8.2
+go get github.com/netdata/systemd-journal-sdk/go@v0.9.0
 ```
 
 Import the journal package:
