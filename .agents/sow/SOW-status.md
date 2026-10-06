@@ -45,10 +45,11 @@ Last updated: 2026-10-03
 
 ## Recently Closed Or Completed
 
-- SOW-0145 - Rust Close Without Retention And v0.8.2: completed for the PR.
-  Adds the consuming Rust API and prepares all eight Rust `0.8.2` crates;
-  497 workspace tests, 31 wiki examples, and six external reviews pass.
-  Authorized registry publication follows merge using the completed record.
+- SOW-0145 - Rust Close Without Retention And v0.8.2: completed and published.
+  All eight Rust `0.8.2` crates are indexed and non-yanked from merged PR #3
+  commit `8ad648a7b4d36bf2d75ee6ee98b42446ff64a276`; checksums/VCS metadata
+  and a fresh Rust `1.91.0` registry consumer pass in both naming modes.
+  Existing root/Go tags retain the already published Go release commit.
 - SOW-0144 - Go v0.8.2 Publication: completed in PR #2 under the user's
   explicit close-out instruction. Paired tag publication and downloaded-module
   verification execute after merge using the procedure in the completed SOW.

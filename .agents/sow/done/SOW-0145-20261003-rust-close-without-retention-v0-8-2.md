@@ -4,9 +4,9 @@
 
 Status: completed
 
-Sub-state: Rust API, package preparation, documentation, validation, and review
-completed for the PR. Authorized registry publication follows the PR's merge;
-this completed preparation record does not claim that upload has occurred.
+Sub-state: Rust API, package preparation, documentation, validation, review,
+and post-merge publication completed. All eight Rust `0.8.2` crates are indexed
+and non-yanked; the exact registry consumer passes on Rust `1.91.0`.
 
 ## Requirements
 
@@ -475,10 +475,13 @@ Rust's additive consuming `Log::close_without_retention()` API and all eight
 the new PR. Normal close behavior is preserved. This SOW is completed inside
 the PR under the user's explicit close-out instruction.
 
-Rust registry publication has not occurred. It executes after the new PR is
-merged using the procedure below; publication success requires all eight
-registry versions and exact-version consumer verification. Existing Go/root
-tags remain at the already published Go commit.
+At PR preparation, registry publication awaited merge and was not claimed as
+completed. PR #3 subsequently merged at
+`8ad648a7b4d36bf2d75ee6ee98b42446ff64a276`; all eight Rust `0.8.2` crates are
+now published, indexed, and non-yanked. Their package checksums and clean VCS
+metadata match that merged source, and the exact registry consumer passes on
+Rust `1.91.0` in both naming modes. The publication receipt below records the
+post-merge evidence. Existing Go/root tags retain their published Go commit.
 
 ## Lessons Extracted
 
@@ -516,3 +519,83 @@ approved SOW's delivery procedure, with completion in the PR as instructed.
 ## Regression Log
 
 This is additive Rust parity, not a regression reopening.
+
+## Publication Verification - 2026-10-03
+
+Completed the authorized post-merge procedure after PR #3 merged. No SOW
+status or directory transition is needed: this record was already completed
+inside that PR under the user's explicit delivery instruction.
+
+Release source and gates:
+
+- Clean source commit: `8ad648a7b4d36bf2d75ee6ee98b42446ff64a276`.
+  Its complete Git tree matches reviewed commit
+  `ca535ddff30b322be71725f1a2925230b8f6c2be`; independent final review carried
+  PASS to the exact merged revision.
+- All six merged-commit workflows passed: Coverage, CodeQL, Codacy SARIF,
+  Verify Doc Examples, Publish Wiki, and Code Quality.
+- Fresh master scanning still has the same four CodeQL findings #3678-#3681
+  already dispositioned above; no new CodeQL finding entered this release.
+- Existing `v0.8.2` and `go/v0.8.2` still peel to
+  `51bf47f1f90562f7b7717ca41aaaac74f75f90f0`. No release tag was changed.
+
+Published packages, in dependency order:
+
+| Package | Version | Verification |
+| --- | --- | --- |
+| `systemd-journal-sdk-common` | `0.8.2` | indexed, non-yanked, checksum/VCS verified |
+| `systemd-journal-sdk-registry` | `0.8.2` | indexed, non-yanked, checksum/VCS verified |
+| `systemd-journal-sdk-core` | `0.8.2` | indexed, non-yanked, checksum/VCS verified |
+| `systemd-journal-sdk-host` | `0.8.2` | indexed, non-yanked, checksum/VCS verified |
+| `systemd-journal-sdk-log-writer` | `0.8.2` | indexed, non-yanked, checksum/VCS verified |
+| `systemd-journal-sdk-index` | `0.8.2` | indexed, non-yanked, checksum/VCS verified |
+| `systemd-journal-sdk-engine` | `0.8.2` | indexed, non-yanked, checksum/VCS verified |
+| `systemd-journal-sdk` | `0.8.2` | indexed, non-yanked, checksum/VCS verified |
+
+Publication and consumer validation:
+
+- Each final `cargo publish --locked --dry-run` passed immediately before its
+  upload on Rust/Cargo `1.91.0`. Each preceding package was published and indexed
+  before proceeding to its dependents; all eight real uploads succeeded.
+- The first upload attempt stopped before any upload because the selected Cargo
+  expected the default registry's credential environment variable. Corrected
+  credential forwarding in the private release wrapper, then successfully
+  published. Credentials remained in memory; no token was recorded.
+- Downloaded each exact crate from the registry, matched its SHA-256 checksum
+  with registry/index metadata, and checked `.cargo_vcs_info.json`: every package
+  records the clean merged source commit above and Rust minimum `1.91`.
+  The published writer source includes `close_without_retention()`.
+- A fresh consumer pins both public SDK and writer to `=0.8.2`, with no path
+  dependency or patch. On Rust `1.91.0`, it calls `journal::Log`'s new method
+  after the original one-second policy/1.5-second wait, eagerly reopens without
+  retention, confirms unchanged archive bytes, verifies the journal natively,
+  and reads the exact original message/one row through `FileReader`. Both chain
+  and strict naming pass. Its five SDK packages in `Cargo.lock` are registry
+  sources with checksums matching the verified publication receipts.
+- An optional offline metadata command requested an uncached Android-specific
+  package even though this consumer runs natively. Registry provenance was
+  instead verified directly from the consumer's locked source/checksum records;
+  no cross-target consumer claim is made.
+- Ignored `.local/rust-v0.8.2.zYsQbBT5/logs/` retains all final dry-run/upload
+  outputs, eight sanitized package receipts, consumer/toolchain output,
+  locked registry provenance, merged CI, scanner inventory, and remote tags.
+  Downloaded verification archives remain under the same run's
+  `registry-artifacts/`; no raw credential or scanner output enters this record.
+
+Artifact maintenance and follow-up mapping:
+
+- Existing SOW-0145 and both status ledgers now record actual publication.
+  Status remains completed under `done/`; no new or reopened SOW is needed.
+- Product scope and active install examples already specify `0.8.2` and its
+  staggered Rust publication without moving Go tags; these remain accurate,
+  so no additional spec or consumer-doc edit is needed.
+- AGENTS.md and runtime skills need no update: publication used the existing
+  authorized release order, purity boundaries, compiler floor, and credential
+  safeguards. No end-user/operator skills are declared or shipped.
+- All publication steps and exact registry consumption are implemented.
+  Existing unrelated quality debt retains the dispositions above; no new
+  deferred publication work remains. Receipt maintenance is submitted through
+  the PR workflow, preserving the user's release-delivery instruction.
+- Publication-receipt validation: `git diff --check` and the SOW audit with
+  changed-artifact sensitive-data scanning both pass. No source changed after
+  publication; the receipt updates only this completed SOW and both ledgers.
