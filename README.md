@@ -76,7 +76,7 @@ dependency alias:
 
 ```toml
 [dependencies]
-journal = { package = "systemd-journal-sdk", version = "0.8.2" }
+journal = { package = "systemd-journal-sdk", version = "0.9.0" }
 ```
 
 Advanced Rust consumers that need lower-level building blocks can also depend
@@ -93,13 +93,16 @@ on the project-prefixed internal packages:
 
 ## Go Package
 
-Install the Go module at `v0.8.2`:
+Install the Go module at `v0.9.0`:
 
 ```sh
-go get github.com/netdata/systemd-journal-sdk/go@v0.8.2
+go get github.com/netdata/systemd-journal-sdk/go@v0.9.0
 ```
 
-Go `v0.8.2` adds `journal.Log.CloseWithoutRetention()`, which archives and
+Go `v0.9.0` adds bounded `IndexedSnapshot` traversal and strict offline index
+verification; see [Indexed snapshots](docs/Indexed-Snapshots.md).
+
+Go `v0.8.2` added `journal.Log.CloseWithoutRetention()`, which archives and
 closes the current journal without applying retention. It supports reopening
 with changed retention settings while preserving archived history. See
 [the Go API guide](docs/Go-API.md) for the caller's retention responsibilities.

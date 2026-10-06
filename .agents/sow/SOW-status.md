@@ -4,7 +4,9 @@ Last updated: 2026-10-06
 
 ## Current
 
-None.
+- SOW-0150 - v0.9.0 Release: in-progress. Paired Rust/Go `0.9.0` release
+  for IndexedSnapshot work; release-prep branch `release/v0.9.0` ready for PR,
+  then Rust publication and `v0.9.0`/`go/v0.9.0` tags on upstream.
 
 ## Pending
 

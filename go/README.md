@@ -3,14 +3,15 @@
 This module contains pure-Go systemd journal reader and writer components. It
 does not use CGO, native addons, or libsystemd linkage.
 
-Install Go release `v0.8.2`:
+Install Go release `v0.9.0`:
 
 ```sh
-go get github.com/netdata/systemd-journal-sdk/go@v0.8.2
+go get github.com/netdata/systemd-journal-sdk/go@v0.9.0
 ```
 
-This release adds `Log.CloseWithoutRetention()` for closing before changing
-retention settings. Go `1.26.2` or newer is required.
+This release adds bounded `IndexedSnapshot` traversal and strict offline index
+verification. `Log.CloseWithoutRetention()`, for closing before changing
+retention settings, is available since `v0.8.2`. Go `1.26.2` or newer is required.
 
 Import path:
 
@@ -484,12 +485,11 @@ go run ./cmd/journalctl --directory ./journals --boot=all --since @1700000000 --
 go run ./cmd/journalctl --file ./active.journal --follow --no-tail --boot=all
 ```
 
-## Unreleased indexed snapshots
+## Indexed snapshots
 
-The source tree adds bounded `IndexedSnapshot` traversal and strict offline index
+Go `v0.9.0` adds bounded `IndexedSnapshot` traversal and strict offline index
 verification for uncertain files. See [Indexed snapshots](../docs/Indexed-Snapshots.md)
 for API examples, caller exclusion, borrowed payloads and recovery costs. Failures
 after a possible file or publication-state mutation prevent further mutation and
 preserve uncertain files during cleanup. Validation and capacity failures known
-to precede mutation leave the writer reusable. These additions are not included
-in the previously published versions listed above.
+to precede mutation leave the writer reusable.
