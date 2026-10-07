@@ -1,6 +1,6 @@
 # SOW Status
 
-Last updated: 2026-10-06
+Last updated: 2026-10-07
 
 ## Current
 
@@ -8,11 +8,10 @@ Last updated: 2026-10-06
 
 ## Pending
 
-- SOW-0151 - v0.9.0 Publication: open. PR #6 merged; await the Rust CI
-  workflow merge and owner Trusted Publishing setup, then publish the eight
-  Rust crates at `0.9.0` in dependency order and push paired `v0.9.0` /
-  `go/v0.9.0` tags to the canonical repository using a maintainer's existing
-  access. Complete only after registry, tag and Go-consumer verification.
+- SOW-0153 - Consumer Documentation Release Clarity: open. Tracks pre-existing
+  Go stability guidance naming `go/v0.3.0` and Rust writer-state method
+  discoverability. No implementation is authorized; documentation approach
+  requires a user decision. Neither issue blocks the paired release.
 - SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
   follow-up analysis for remaining global ENTRY-array and regular/fallback DATA
   array reopens found during SOW-0135 review; no implementation is authorized.
@@ -50,17 +49,25 @@ Last updated: 2026-10-06
 
 ## Recently Closed Or Completed
 
+- SOW-0151 - v0.9.0 Publication: completed. Release CI 37607475693 passed both
+  language suites and published/verified all eight Rust crates. Signed annotated
+  `v0.9.0` and `go/v0.9.0` both peel to `fba9d45d...`; fresh exact Rust/Go
+  consumers pass. Preparation review gap is resolved, two external timeouts
+  are disclosed, and consumer prose follow-up is tracked in SOW-0153.
+
 - SOW-0152 - Paired CI Release: completed. Manual Rust Trusted Publishing CI
   validates both languages and records the selected source for maintainers
   to push paired repository/Go tags with existing access. Exact artifact and
   consumer checks, controlled recovery tests, minimum-toolchain suites and
   independent review pass; four external reports are positive and two report
-  gaps are disclosed. Owner setup and actual publication remain in SOW-0151.
+  gaps are disclosed. Owner setup and actual `0.9.0` publication are verified
+  in completed SOW-0151.
 
 - SOW-0150 - v0.9.0 Release Preparation: completed in release PR #6. Rust and
   Go versions, install examples, release notes and a Rust migration note for
   the new `SdkError::Cancelled` and `JournalError::WriterPoisoned` variants;
-  PR CI passes. Publication tracked by SOW-0151.
+  PR CI passes. Post-merge preparation review and actual publication are
+  verified in completed SOW-0151.
 
 - SOW-0147 - Indexed Snapshots For Domain History: completed again. Commit 7c82941 addresses all 19 Codacy findings with behavior-preserving decomposition, formatting and narrow audited annotations. Both CodeQL collection-operation alerts are documented false positives, still open remotely. Tests, analyzers, bounded benchmarks and independent review pass; no push or remote mutation.
 

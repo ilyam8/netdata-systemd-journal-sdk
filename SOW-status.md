@@ -1,6 +1,6 @@
 # SOW Status
 
-Last updated: 2026-10-03
+Last updated: 2026-10-07
 
 This root file is a short convenience index. The canonical detailed SOW ledger
 is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
@@ -11,6 +11,9 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Pending
 
+- `SOW-0153-20261007-consumer-docs-release-clarity.md` - open. Tracks stale Go
+  consumable-version prose and Rust writer-state method discoverability;
+  documentation design and implementation remain unapproved.
 - `SOW-0137-20260726-rust-writer-residual-array-open-performance.md` - open.
   Tracks measurement and design decisions for remaining canonical Rust writer
   global ENTRY-array and regular/fallback DATA array reopens.
@@ -35,6 +38,22 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0151-20261006-v0-9-0-publication.md` - completed. Successful Release CI
+  published and verified eight Rust `0.9.0` crates; paired signed annotated
+  tags target `fba9d45d...`, and fresh exact Rust/Go consumers pass.
+- `SOW-0152-20261006-paired-ci-release.md` - completed and merged in PR #7.
+  Manual Rust Trusted Publishing CI validates both languages and verifies
+  exact artifacts; maintainers push paired tags using existing access.
+- `SOW-0150-20261006-v0-9-0-release.md` - completed and merged in PR #6.
+  Prepared paired versions, install guidance and Rust migration notes;
+  actual publication is verified in completed SOW-0151.
+- `SOW-0149-20261006-snapshot-payload-header-cost.md` - completed. Avoids
+  unnecessary Go DATA header parsing during snapshot payload traversal.
+- `SOW-0148-20261006-indexed-snapshot-archive-state.md` - completed. Rust and
+  Go expose the snapshot's frozen archived-state metadata.
+- `SOW-0147-20261006-indexed-snapshots.md` - completed again.
+  Paired indexed snapshots, strict verification and writer-failure behavior
+  are validated; Codacy findings are addressed or dispositioned.
 - `SOW-0145-20261003-rust-close-without-retention-v0-8-2.md` - completed and
   published. All eight Rust `0.8.2` crates are indexed and non-yanked from
   merged PR #3 commit `8ad648a7b4d36bf2d75ee6ee98b42446ff64a276`;

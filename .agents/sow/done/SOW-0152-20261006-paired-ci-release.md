@@ -10,7 +10,7 @@ Sub-state: manual Rust CI publication and the paired-tag maintainer handoff
 are implemented, validated and reviewed. CI uses crates.io Trusted Publishing;
 authorized maintainers push tags with existing access. The selected source,
 Rust-first order and final Go verification are preserved. Owner setup and
-actual publication belong to pending SOW-0151.
+actual `0.9.0` publication completed under SOW-0151 on 2026-10-07.
 
 ## Requirements
 
@@ -673,7 +673,8 @@ exact Go consumption. Local executable evidence and independent final review
 pass. Four external reports are positive; two missing reports are disclosed
 coverage gaps. SOW completion and code are included together in the separate
 PR. No version publication, public tag or account-setting change is performed
-by this implementation SOW; actual execution remains in pending SOW-0151.
+by this implementation SOW; actual execution was tracked separately in
+SOW-0151 and completed on 2026-10-07.
 
 ## Lessons Extracted
 
@@ -696,10 +697,11 @@ by this implementation SOW; actual execution remains in pending SOW-0151.
 
 ## Followup
 
-Actual 0.9.0 Trusted Publishing setup, Rust CI publication, maintainer tag
-pushes and final verification remain with pending SOW-0151, merged through
-PR #6 and aligned here with the approved procedure. This SOW supplies the
-workflow and operator procedure.
+Actual `0.9.0` setup, publication, paired tags and exact consumers completed
+in SOW-0151 on 2026-10-07. Release run `37607475693` succeeded; all eight Rust
+crates and both signed annotated tags identify source `fba9d45d...`, and fresh
+Rust/Go consumers pass. This SOW supplies the unchanged workflow/operator
+procedure; SOW-0151 preserves the actual execution and close-out evidence.
 
 ## Regression Log
 
