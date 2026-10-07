@@ -98,6 +98,8 @@ CRITICAL REPOSITORY BOUNDARY:
 6. Fix verified blocking findings and, under standing authorization, re-review
    after material fixes until phase gates are satisfied.
 7. Run the project-local audit and record results before closing.
+   Inspect its full verdict: the audit can exit zero while reporting partial
+   state. Require the complete-and-clean verdict before advancing or closing.
 8. If the audit fails, repair the issue inside this repository, rerun the audit, and record the clean result before closing.
 9. Prefer committing the verified chunk before starting the next work chunk.
 

@@ -142,7 +142,10 @@ scan_sensitive_file() {
       push @hits, "customer-or-private-identifier" unless $value =~ /^(redacted|example|placeholder|customer-|client-|tenant-|account-|org-|user|none|null)/i;
     }
 
-    if ($line =~ /\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b/i) {
+    # The canonical public Git SSH remote is not a personal email address.
+    my $email_line = $line;
+    $email_line =~ s{(?<!\S)git\@github\.com:netdata/systemd-journal-sdk\.git(?=\s|$)}{}g;
+    if ($email_line =~ /\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b/i) {
       push @hits, "email-address" unless $line =~ /\b(example\.com|example\.org|example\.net|localhost)\b/i;
     }
 

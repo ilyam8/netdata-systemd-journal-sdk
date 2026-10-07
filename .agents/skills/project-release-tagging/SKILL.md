@@ -9,6 +9,10 @@ description: "Use when creating, checking, or pushing release tags for this repo
 Ensure published releases are consumable by all SDK users, including Go users
 whose module lives under the `go/` subdirectory.
 
+For the complete release process, use
+[project-release](../project-release/SKILL.md). This skill supplies focused
+package and tag rules; `RELEASING.md` maintains the CI and maintainer commands.
+
 ## Scope
 
 Use this skill when:
