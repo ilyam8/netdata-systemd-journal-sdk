@@ -1,0 +1,256 @@
+name: Release
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/release.yml'
+      - 'tests/release/**'
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/release.yml'
+      - 'tests/release/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (X.Y.Z, for example 0.9.0)'
+        required: true
+        type: string
+      commit:
+        description: 'Full 40-character SHA of the merged release source'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && 'publish' || github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  CARGO_HOME: ${{ github.workspace }}/.local/cargo-home
+  CARGO_TARGET_DIR: ${{ github.workspace }}/.local/cargo-target
+  CARGO_BUILD_JOBS: '2'
+  GOMODCACHE: ${{ github.workspace }}/.local/go-mod
+  GOCACHE: ${{ github.workspace }}/.local/go-cache
+  GOPATH: ${{ github.workspace }}/.local/go-path
+  GOTOOLCHAIN: local
+  GOMAXPROCS: '2'
+  CGO_ENABLED: '0'
+
+jobs:
+  checks:
+    name: Release helper tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.inputs.outputs.version }}
+      commit: ${{ steps.inputs.outputs.commit }}
+    steps:
+      - name: Checkout workflow code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Test release failures and recovery
+        run: python3 -m unittest discover -s tests/release -p 'test_*.py' -v
+      - name: Validate manual release inputs and branch
+        if: github.event_name == 'workflow_dispatch'
+        id: inputs
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: python3 tests/release/release.py inputs --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT"
+
+  validate:
+    name: Validate release source and both languages
+    needs: checks
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'netdata/systemd-journal-sdk' &&
+      github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ needs.checks.outputs.version }}
+      commit: ${{ needs.checks.outputs.commit }}
+      rust-version: ${{ steps.manifest.outputs.rust-version }}
+    env:
+      RELEASE_VERSION: ${{ needs.checks.outputs.version }}
+      RELEASE_COMMIT: ${{ needs.checks.outputs.commit }}
+      RELEASE_SOURCE: ${{ github.workspace }}/.local/release/source
+    steps:
+      - name: Checkout workflow code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Checkout selected merged source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.checks.outputs.commit }}
+          path: .local/release/source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read declared compiler minimum
+        id: manifest
+        run: python3 tests/release/release.py manifest --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT"
+      - name: Setup Rust at the source minimum
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+        with:
+          toolchain: ${{ steps.manifest.outputs.rust-version }}
+      - name: Setup Go at the source minimum
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: .local/release/source/go/go.mod
+          cache: false
+      - name: Check source, versions, registry state and existing tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tests/release/release.py preflight --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT"
+      - name: Test Rust
+        run: cargo test --manifest-path "$RELEASE_SOURCE/rust/Cargo.toml" --workspace --locked
+      - name: Test Go
+        working-directory: .local/release/source/go
+        run: go test ./...
+
+  publish:
+    name: Publish and verify Rust crates
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      RELEASE_SOURCE: ${{ github.workspace }}/.local/release/source
+    steps:
+      - name: Checkout workflow code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Checkout selected merged source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          path: .local/release/source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup Rust at the source minimum
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+        with:
+          toolchain: ${{ needs.validate.outputs.rust-version }}
+
+      - name: Dry-run or verify systemd-journal-sdk-common
+        id: common
+        run: python3 tests/release/release.py prepare --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-common
+      - name: Get temporary publishing permission for systemd-journal-sdk-common
+        if: steps.common.outputs.publish == 'true'
+        id: auth_common
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish and verify systemd-journal-sdk-common
+        if: steps.common.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_common.outputs.token }}
+        run: python3 tests/release/release.py publish --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-common
+
+      - name: Dry-run or verify systemd-journal-sdk-registry
+        id: registry
+        run: python3 tests/release/release.py prepare --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-registry
+      - name: Get temporary publishing permission for systemd-journal-sdk-registry
+        if: steps.registry.outputs.publish == 'true'
+        id: auth_registry
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish and verify systemd-journal-sdk-registry
+        if: steps.registry.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_registry.outputs.token }}
+        run: python3 tests/release/release.py publish --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-registry
+
+      - name: Dry-run or verify systemd-journal-sdk-core
+        id: core
+        run: python3 tests/release/release.py prepare --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-core
+      - name: Get temporary publishing permission for systemd-journal-sdk-core
+        if: steps.core.outputs.publish == 'true'
+        id: auth_core
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish and verify systemd-journal-sdk-core
+        if: steps.core.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_core.outputs.token }}
+        run: python3 tests/release/release.py publish --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-core
+
+      - name: Dry-run or verify systemd-journal-sdk-host
+        id: host
+        run: python3 tests/release/release.py prepare --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-host
+      - name: Get temporary publishing permission for systemd-journal-sdk-host
+        if: steps.host.outputs.publish == 'true'
+        id: auth_host
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish and verify systemd-journal-sdk-host
+        if: steps.host.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_host.outputs.token }}
+        run: python3 tests/release/release.py publish --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-host
+
+      - name: Dry-run or verify systemd-journal-sdk-log-writer
+        id: log_writer
+        run: python3 tests/release/release.py prepare --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-log-writer
+      - name: Get temporary publishing permission for systemd-journal-sdk-log-writer
+        if: steps.log_writer.outputs.publish == 'true'
+        id: auth_log_writer
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish and verify systemd-journal-sdk-log-writer
+        if: steps.log_writer.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_log_writer.outputs.token }}
+        run: python3 tests/release/release.py publish --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-log-writer
+
+      - name: Dry-run or verify systemd-journal-sdk-index
+        id: index
+        run: python3 tests/release/release.py prepare --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-index
+      - name: Get temporary publishing permission for systemd-journal-sdk-index
+        if: steps.index.outputs.publish == 'true'
+        id: auth_index
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish and verify systemd-journal-sdk-index
+        if: steps.index.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_index.outputs.token }}
+        run: python3 tests/release/release.py publish --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-index
+
+      - name: Dry-run or verify systemd-journal-sdk-engine
+        id: engine
+        run: python3 tests/release/release.py prepare --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-engine
+      - name: Get temporary publishing permission for systemd-journal-sdk-engine
+        if: steps.engine.outputs.publish == 'true'
+        id: auth_engine
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish and verify systemd-journal-sdk-engine
+        if: steps.engine.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_engine.outputs.token }}
+        run: python3 tests/release/release.py publish --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk-engine
+
+      - name: Dry-run or verify systemd-journal-sdk
+        id: sdk
+        run: python3 tests/release/release.py prepare --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk
+      - name: Get temporary publishing permission for systemd-journal-sdk
+        if: steps.sdk.outputs.publish == 'true'
+        id: auth_sdk
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish and verify systemd-journal-sdk
+        if: steps.sdk.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth_sdk.outputs.token }}
+        run: python3 tests/release/release.py publish --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --package systemd-journal-sdk
+
+      - name: Verify all crates and build an exact-version registry consumer
+        run: python3 tests/release/release.py verify-rust --source "$RELEASE_SOURCE" --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT"

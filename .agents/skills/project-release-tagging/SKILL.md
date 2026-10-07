@@ -44,7 +44,44 @@ Use this skill when:
   approval. Go module proxies and checksum databases may cache the old tag
   target.
 
-## Workflow
+## CI Release Workflow
+
+- Prefer the canonical repository's manual `Release` workflow for Rust
+  publication after preparation has merged. Read `RELEASING.md` for setup and
+  execution. The workflow file is `.github/workflows/release.yml`; helper and
+  recovery tests live under `tests/release/`.
+- The user explicitly starts a run on master with version `X.Y.Z` and the full
+  merged release source SHA. Workflow code and release source are separate
+  checkouts; the source may precede the workflow's merge commit.
+- Configure the GitHub `release` environment for exactly the master branch,
+  and configure all eight crates for Trusted Publishing with owner `netdata`,
+  repository `systemd-journal-sdk`, workflow `release.yml`, environment `release`.
+- CI checks both language suites at source-declared compiler minimums before
+  obtaining publishing permission. Each new crate is dry-run, then receives
+  fresh temporary permission and is uploaded in the established order.
+- API/index availability, non-yanked status, archive checksum and clean source
+  SHA must agree before a published version can be skipped. Preserve the
+  original version/source inputs when resuming a partial release.
+- All eight Rust crates and an exact-version registry consumer pass before
+  a maintainer pushes paired annotated tags using existing GitHub access.
+  Copy the exact source from the successful CI summary, create missing tags
+  there, and push the new pair atomically to the canonical repository.
+  Correct existing siblings are preserved; conflicting tags stop the release.
+- Any maintainer with repository write access can start the CI workflow.
+  CI uses crates.io Trusted Publishing; maintainers with tag-push permission
+  own GitHub tag creation. No additional GitHub App or account token is
+  configured for this workflow.
+- After the tag push, run the guide's `verify-go` helper command to verify
+  both annotated targets, matching Rust archive sources and a fresh
+  exact-version Go consumer. It reads the
+  selected source's Go minimum, so verification supports historical source
+  while the working branch has advanced. The helper does not change tags.
+- Actual version publication belongs to its execution SOW. Completing the
+  automation implementation SOW does not mean a version has been published.
+- A new crate that does not already exist needs an explicitly authorized
+  initial publication before Trusted Publishing can be configured for it.
+
+## Manual Fallback Workflow
 
 1. Confirm the intended Rust crate and Go module versions. They are normally
    the same, for example `0.2.0`, but may differ when a SOW records a

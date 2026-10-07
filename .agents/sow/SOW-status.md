@@ -4,14 +4,15 @@ Last updated: 2026-10-06
 
 ## Current
 
-None.
+- None.
 
 ## Pending
 
-- SOW-0151 - v0.9.0 Publication: open. After PR #6 merges, publish the eight
+- SOW-0151 - v0.9.0 Publication: open. PR #6 merged; await the Rust CI
+  workflow merge and owner Trusted Publishing setup, then publish the eight
   Rust crates at `0.9.0` in dependency order and push paired `v0.9.0` /
-  `go/v0.9.0` tags to the canonical repository. Needs a crates.io publisher
-  decision; the crates currently have a single owner.
+  `go/v0.9.0` tags to the canonical repository using a maintainer's existing
+  access. Complete only after registry, tag and Go-consumer verification.
 - SOW-0137 - Rust Writer Residual Array-Open Performance: open. Tracks measured
   follow-up analysis for remaining global ENTRY-array and regular/fallback DATA
   array reopens found during SOW-0135 review; no implementation is authorized.
@@ -48,6 +49,13 @@ None.
   decisions. Not executable until the user explicitly resumes it.
 
 ## Recently Closed Or Completed
+
+- SOW-0152 - Paired CI Release: completed. Manual Rust Trusted Publishing CI
+  validates both languages and records the selected source for maintainers
+  to push paired repository/Go tags with existing access. Exact artifact and
+  consumer checks, controlled recovery tests, minimum-toolchain suites and
+  independent review pass; four external reports are positive and two report
+  gaps are disclosed. Owner setup and actual publication remain in SOW-0151.
 
 - SOW-0150 - v0.9.0 Release Preparation: completed in release PR #6. Rust and
   Go versions, install examples, release notes and a Rust migration note for

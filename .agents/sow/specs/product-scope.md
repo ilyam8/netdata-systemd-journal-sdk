@@ -54,6 +54,36 @@ that can make a consumer accidentally leave the optimized path. The repository
 publishes these pages to the GitHub wiki on trusted `master` pushes through the
 wiki publication workflow.
 
+## Paired CI Releases
+
+The manual `Release` workflow runs on canonical `master` and accepts a stable
+version plus a full merged source SHA. Its own code stays at the dispatch's
+master SHA; the selected release source is checked out separately. PRs and
+ordinary pushes run helper tests only.
+
+Both language suites use their declared compiler minimums before publication.
+The eight existing public Rust crates are dry-run and published in dependency
+order through Trusted Publishing in the `release` environment, configured for
+the master branch only. Every crate is checked against API/index metadata,
+archive checksum and clean Cargo VCS source. Existing versions are skipped
+only after these checks, supporting partial-publication recovery.
+
+After all Rust packages and an exact-version registry consumer pass, CI
+reports the exact version/source to the maintainer. An authorized maintainer
+uses existing GitHub access to create annotated `vVERSION` and `go/vVERSION`
+at that selected source and pushes both new tags atomically. The operator
+verification helper checks both canonical targets, matching Rust archive
+sources and an exact-version Go
+consumer using the selected commit's module/compiler declaration. Correct
+existing tags are preserved; conflicting tags or crate sources stop the
+release. CI uses Trusted Publishing for crates.io and requires no additional
+GitHub App or account token for tags. Multiple authorized maintainers can run
+CI and perform the documented tag handoff.
+
+Repository/crate settings are configured once by their owners; `RELEASING.md`
+contains the setup and recovery procedure. Workflow implementation completion
+does not claim that a particular version has been published.
+
 ## Delivery Priority
 
 - Rust and Go are the only required product language targets.
