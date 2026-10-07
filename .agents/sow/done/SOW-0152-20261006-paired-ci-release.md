@@ -94,9 +94,9 @@ Sources checked:
   documentation and official `rust-lang/crates-io-auth-action`.
 - Canonical repository workflows, environments, rulesets and remote tags.
 
-Current state:
+State before implementation (2026-10-06):
 
-- No release environment is configured in the canonical repository.
+- No release environment was configured in the canonical repository.
 - SOW-0066 is a separate eventual stable 1.0.0 release, not this automation.
 - The preparation/publication split in PR #6 avoids overlapping implementation
   with this reusable workflow SOW. Actual publication stays with SOW-0151.
