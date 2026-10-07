@@ -40,8 +40,9 @@ Facts:
   integrated into this implementation branch.
 - All eight public crates already exist at `0.8.2`; none has `0.9.0` as of
   2026-10-06. Trusted Publishing supports these existing crates.
-- PR #6 prepares `0.9.0`, completes SOW-0150, and tracks actual publication in
-  pending SOW-0151. This SOW delivers reusable automation, not a public release.
+- PR #6 prepared `0.9.0`, completed SOW-0150, and created pending SOW-0151
+  for actual publication. That execution completed on 2026-10-07. This SOW
+  delivered the reusable automation used by SOW-0151.
 - The Go module lives in `go/` and needs `go/vVERSION` as well as `vVERSION`.
 - Supported compiler minimums remain Rust 1.91 and Go 1.26.2.
 
@@ -53,10 +54,11 @@ Inferences:
 
 Unknowns:
 
-- The crate owner must configure Trusted Publishing, and a repository
-  administrator must configure the release environment before activation.
-  These account settings cannot be supplied through a source-code PR. The
-  workflow will check the environment and fail clearly when setup is missing.
+- At implementation close, owner configuration of Trusted Publishing and the
+  release environment remained activation prerequisites outside the source PR.
+  The user verified that setup, and real CI publication completed under
+  SOW-0151 on 2026-10-07. No setup unknown remains for this release; the workflow
+  still checks the environment before every activation.
 
 ### Acceptance Criteria
 
@@ -197,7 +199,7 @@ Validation plan:
 - Local SOW audit, diff check, same-pattern scan and independent final review;
   recommend external review at the complete local-validation boundary.
 
-Artifact impact plan:
+Artifact impact plan (approved 2026-10-06):
 
 - AGENTS.md: release behavior belongs in spec/skill; roles and workflow rules
   are already suitable and need no change.
@@ -631,8 +633,9 @@ Failure handling:
   pre-existing notes, rejected from this CI-path scope. The delivered guide
   uses the explicit canonical remote and the operative scanner includes the
   Go README. The earlier Go stress timeout and PR #6 preparation review-record
-  gap retain their recorded dispositions; the latter remains an explicit
-  prerequisite in pending SOW-0151, not silently accepted here.
+  gap retain their recorded dispositions. The preparation review was an
+  explicit prerequisite in pending SOW-0151 at implementation close; its
+  completed review receipt is now recorded there, dated 2026-10-07.
 
 Sensitive data gate:
 
@@ -657,10 +660,10 @@ Sensitive data gate:
   procedure is documented directly instead of introducing an unused skill.
 - SOW lifecycle: this implementation is completed in done/ with code and the
   lifecycle change in one public commit. Account setup and actual publication
-  are represented by PR #6's real pending SOW-0151. The current directory
-  retains its committed .gitkeep; final closure is audited before submission.
-- SOW-status.md: records completion together with the SOW move. Other pending
-  work is unchanged.
+  completed under SOW-0151 on 2026-10-07; its execution receipts and completed
+  status are in done/. The current directory retains its committed .gitkeep.
+- SOW-status.md: recorded implementation completion together with the SOW move.
+  Both current ledgers also record actual publication completed in SOW-0151.
 - Lessons: recorded below. Follow-up mapping has a concrete execution SOW;
   no untracked SDK changes or additional release features are deferred here.
 
