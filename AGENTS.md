@@ -435,6 +435,7 @@ Runtime input skills:
 - `.agents/skills/project-agent-orchestration/SKILL.md`
 - `.agents/skills/project-docs-authoring/SKILL.md`
 - `.agents/skills/project-journal-compatibility/SKILL.md`
+- `.agents/skills/project-release/SKILL.md`
 - `.agents/skills/project-release-tagging/SKILL.md`
 
 Legacy runtime skills:

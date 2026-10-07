@@ -49,6 +49,11 @@ Last updated: 2026-10-07
 
 ## Recently Closed Or Completed
 
+- SOW-0154 - Project Release Skill: completed. Adds the full-process team
+  skill to PR #8, including language parity, CI publication, maintainer tags,
+  consumer verification and recovery. Local/independent checks pass; one
+  positive external report and five coverage gaps are recorded.
+
 - SOW-0151 - v0.9.0 Publication: completed. Release CI 37607475693 passed both
   language suites and published/verified all eight Rust crates. Signed annotated
   `v0.9.0` and `go/v0.9.0` both peel to `fba9d45d...`; fresh exact Rust/Go

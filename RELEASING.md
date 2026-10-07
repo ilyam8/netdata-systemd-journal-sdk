@@ -6,6 +6,10 @@ tag-push permission creates the repository and Go tags at that same commit.
 A maintainer starts CI manually after release preparation and the workflow
 have merged.
 
+The team's full-process project skill is
+[`project-release`](.agents/skills/project-release/SKILL.md). Ask to use this
+skill when preparing, publishing, verifying or resuming a release.
+
 ## One-time setup
 
 1. In the canonical repository, open **Settings → Environments** and create

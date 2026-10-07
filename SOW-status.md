@@ -38,6 +38,9 @@ is `.agents/sow/SOW-status.md`; if summaries differ, the canonical ledger wins.
 
 ## Done
 
+- `SOW-0154-20261007-project-release-skill.md` - completed. Adds the team
+  release skill, parity and publication/recovery gates, operator routing and
+  a scoped audit correction. Validation/review pass; coverage gaps disclosed.
 - `SOW-0151-20261006-v0-9-0-publication.md` - completed. Successful Release CI
   published and verified eight Rust `0.9.0` crates; paired signed annotated
   tags target `fba9d45d...`, and fresh exact Rust/Go consumers pass.
